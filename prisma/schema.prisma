@@ -1,0 +1,64 @@
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Couple {
+  id           String       @id @default(cuid())
+  code         String       @unique
+  monthsTogether Int?
+  createdAt    DateTime     @default(now())
+  participants Participant[]
+}
+
+model Participant {
+  id         String     @id @default(cuid())
+  coupleId   String
+  couple     Couple     @relation(fields: [coupleId], references: [id])
+  fullName   String
+  netId      String
+  email      String?
+  startedAt  DateTime   @default(now())
+  completedAt DateTime?
+  responses  Response[]
+}
+
+model Question {
+  id         String   @id   // e.g., Q1..Q50
+  section    String
+  domain     String
+  construct  String
+  text       String
+  responseType String   // Likert7 | Likert6 | Likert5 | MC_SINGLE | MC_MULTI
+  order      Int
+  options    Option[]
+}
+
+model Option {
+  id         String   @id @default(cuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id])
+  label      String
+  value      String
+  ord        Int
+}
+
+model Response {
+  id           String   @id @default(cuid())
+  participantId String
+  participant   Participant @relation(fields: [participantId], references: [id])
+  questionId    String
+  question      Question @relation(fields: [questionId], references: [id])
+  selfAnswer    String   // store selected option value or numeric as string
+  acceptable    String   // JSON: {mode:'range', tol:'same'|'±1'|'±2'|'any', self:int} or {mode:'options', opts:[...]}
+  importance    Int      // 0|1|10|50|250
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([participantId, questionId])
+}
