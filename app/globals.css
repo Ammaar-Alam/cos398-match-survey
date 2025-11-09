@@ -6,9 +6,22 @@
 :root { color-scheme: light; }
 html, body { height: 100%; }
 body { @apply bg-white text-slate-900; }
-.container { @apply mx-auto px-4; }
+.container { @apply mx-auto px-4 sm:px-6; }
 
 /* light component utility styles */
-.choice { @apply border rounded-md px-3 py-2 text-center cursor-pointer transition-colors hover:border-slate-400; }
-.choice-selected { @apply border-brand-600 ring-2 ring-brand-200 bg-brand-50; }
-.card { @apply rounded-2xl border border-slate-200 bg-white shadow-md; }
+.choice { 
+  @apply border-2 rounded-lg px-3 py-2.5 text-center cursor-pointer transition-all duration-200;
+  @apply hover:border-brand-400 hover:bg-brand-50/50;
+  @apply active:scale-95;
+  @apply flex items-center justify-center;
+  min-height: 44px;
+}
+.choice-selected { 
+  @apply border-brand-600 ring-2 ring-brand-200 bg-brand-50 shadow-sm;
+}
+.choice-acceptable {
+  @apply border-emerald-400 bg-emerald-50/50 ring-1 ring-emerald-200;
+}
+.card { 
+  @apply rounded-2xl border border-slate-200 bg-white shadow-lg;
+}

@@ -8,10 +8,9 @@ export const LIKERT6 = [
 ] as const;
 
 export const LIKERT5_IMPORTANCE = [
-  'Irrelevant (0)', 'A little (1)', 'Somewhat (10)', 'Very (50)', 'Mandatory (250)'
+  'Irrelevant', 'A little', 'Somewhat', 'Very', 'Mandatory'
 ] as const;
 
-// reordered with default expectation of "Any answer" first
 export const ACCEPTABLE_LIKERT = [
-  'Any answer', '±2 steps', '±1 step', 'Same (exactly my answer)'
+  'Same answer', '±1 step', '±2 steps', 'Any answer'
 ] as const;
