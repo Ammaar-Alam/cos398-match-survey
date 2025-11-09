@@ -13,7 +13,7 @@ This app **only collects data**. All scoring/matching will be performed offline 
 - **TailwindCSS** + **Framer Motion** for styling and micro-animations.
 - **Prisma** ORM + **PostgreSQL** for persistence.
 - **No auth** (by request): participants enter **Couple Code**, **Full name**, **Princeton NetID**. A `participantId` is stored in localStorage for the session.
-- **Export** endpoint returns a wide CSV with columns `SELF_Q*`, `ACC_Q*`, `IMP_Q*` ready for downstream scoring.
+- **Export** endpoint returns a wide CSV with columns `SELF_Q*`, `ACC_Q*`, `IMP_Q*`, and `IMP_LABEL_Q*` ready for downstream scoring.
 
 ## Getting started
 ```bash
@@ -48,14 +48,14 @@ Useful commands:
 - `Option(id, questionId, label, value, ord)`
 - `Response(participantId, questionId, selfAnswer, acceptable, importance)`
 
-`acceptable` is JSON-encoded per item:
+`acceptable` is JSON-encoded per item (with lightweight meta for data quality such as `meta.tMs` time-on-item in ms):
 - Likert: `{mode:'range', tol:'Same|±1 step|±2 steps|Any answer'}`  
 - MC: `{mode:'options', opts:['1','3',...]}`
 
 ## Routes / UI
 - `/` — intro page, study context, CTA.
 - `/start` — register with **Couple Code**, **Full name**, **NetID**, optional email/months.
-- `/survey/[index]` — one question per page, **triad** UI (self / acceptable / importance), **arrow‑key** nav, progress %.
+- `/survey/[index]` — one question per page, **triad** UI (self / acceptable / importance), **arrow‑key** nav, progress %. Likert items display verbal anchors (TIPI 7‑point agree, PVQ 6‑point PVQ portraits). Acceptable for Likert defaults to **±1 step** after selecting your self‑answer (you can change it).
 - `/done` — thank-you page.
 - `/privacy` — static.
 - `/api/register` — POST to create or join couple; returns `{ participantId }` (stored client-side).
@@ -65,7 +65,7 @@ Useful commands:
 
 ## Export
 - Admin requests: `GET /api/admin/export?key=YOUR_ADMIN_KEY`  
-- CSV columns: `participantId,coupleCode,fullName,netId,SELF_Q1..50,ACC_Q1..50,IMP_Q1..50`
+- CSV columns: `participantId,coupleCode,fullName,netId,SELF_Q1..50,ACC_Q1..50,IMP_Q1..50,IMP_LABEL_Q1..50`
 
 ## Notes for production
 - Put Postgres behind SSL (Neon/Supabase). 
@@ -75,7 +75,10 @@ Useful commands:
 - For IRB: host consent & privacy pages; keep identifiers minimal; encrypt backups.
 
 ## Replace PVQ wording
-PVQ-21 in `data/questions.json` is paraphrased; replace with the official ESS PVQ‑21 portraits and keep the 6‑point anchors for publication-grade fidelity.
+PVQ-21 in `data/questions.json` is paraphrased; replace with the official ESS PVQ‑21 portraits and keep the 6‑point anchors for publication-grade fidelity. If you provide the official text, we can import it directly into `data/questions.json`.
+
+## Optional quality check (IMC)
+Set `ENABLE_IMC=true` in the environment to inject a single instructional manipulation check (IMC) item in the middle of the survey (asks respondents to select 3 = “Somewhat”). This is flagged only in data for offline QC; it does not gate completion.
 
 ## Keyboard navigation and UX
 - Right/Left arrows = Next/Back

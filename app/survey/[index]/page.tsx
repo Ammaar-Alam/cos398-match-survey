@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useRouter } from 'next/navigation'
-import { LIKERT5_IMPORTANCE, ACCEPTABLE_LIKERT } from '../../../lib/scales'
+import { LIKERT5_IMPORTANCE, ACCEPTABLE_LIKERT, LIKERT6, LIKERT7 } from '../../../lib/scales'
 
 type Question = {
   id: string
@@ -43,9 +43,11 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
   const [questions, setQuestions] = useState<Question[]>([])
   const [q, setQ] = useState<Question | null>(null)
   const [selfAnswer, setSelfAnswer] = useState('')
+  const [selfMulti, setSelfMulti] = useState<string[]>([])
   const [importance, setImportance] = useState('')
   const [acceptable, setAcceptable] = useState<any>(null)
   const [saving, setSaving] = useState(false)
+  const [tStart, setTStart] = useState<number>(0)
 
   useEffect(() => { fetchQuestions().then(setQuestions) }, [])
   useEffect(() => {
@@ -53,8 +55,10 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
       const qq = questions[idx0]
       setQ(qq)
       setSelfAnswer('')
+      setSelfMulti([])
       setImportance('')
       setAcceptable(null)
+      try { setTStart(performance.now()) } catch {}
     }
   }, [questions, idx0])
 
@@ -71,7 +75,11 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
         if (!data) {
           return
         }
-        setSelfAnswer(data.selfAnswer || '')
+        if (q.responseType === 'MC_MULTI') {
+          try { setSelfMulti(data.selfAnswer ? JSON.parse(data.selfAnswer) : []) } catch { setSelfMulti([]) }
+        } else {
+          setSelfAnswer(data.selfAnswer || '')
+        }
         try {
           const parsed = data.acceptable ? JSON.parse(data.acceptable) : null
           if (parsed) setAcceptable(parsed)
@@ -96,12 +104,61 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
   const total = questions.length || 50
   const progress = Math.round(((idx0 + 1) / total) * 100)
   const prevProgress = idx0 > 0 ? Math.round((idx0 / total) * 100) : 0
+  // section intro logic
+  const showSectionIntro = idx0 === 0 || questions[idx0]?.section !== questions[idx0 - 1]?.section
+  function sectionIntroFor(section?: string): { title: string; body: string } | null {
+    if (!section) return null
+    const s = section.toLowerCase()
+    if (s.includes('tipi')) return { title: 'Personality (TIPI)', body: 'Answer about YOU: rate how much you agree with each statement. Then choose what answers would be acceptable in a partner and how important alignment on that item should be for matching.' }
+    if (s.includes('pvq')) return { title: 'Core Values (PVQ‑21)', body: 'Portrait method: each item describes “he/she…”. Rate how much this sounds like YOU (Very much like me → Not like me at all). Then specify acceptable partner answers and how important matching on this value should be.' }
+    if (s.includes('social')) return { title: 'Social Preferences', body: 'First answer about YOU. Then indicate what you would accept from a partner and how much matching on this should matter.' }
+    if (s.includes('communication')) return { title: 'Communication & Friendship', body: 'First answer about YOU. Then specify acceptable partner answers and how important alignment is.' }
+    if (s.includes('habits') || s.includes('lifestyle')) return { title: 'Daily Habits & Lifestyle', body: 'Answer about YOUR typical habits. Then mark acceptable partner answers and match importance.' }
+    if (s.includes('priorities') || s.includes('deal')) return { title: 'Priorities & Deal‑breakers', body: 'Answer about YOU. Then specify what you can accept in a partner and how strongly this should influence matching.' }
+    return { title: section, body: 'Answer about YOU. Then specify acceptable partner answers and how important matching on this should be.' }
+  }
+  function isTIPI(section?: string) { return !!section?.toLowerCase().includes('tipi') }
+  function isPVQ(section?: string) { return !!section?.toLowerCase().includes('pvq') }
+  function selfHelper(section?: string, responseType?: string): string {
+    if (isPVQ(section)) return 'Portrait method: rate how much this sounds like YOU.'
+    if (isTIPI(section)) return 'Rate how much you agree with the statement about YOU.'
+    if (responseType?.startsWith('Likert')) return 'Rate how much this describes YOU.'
+    return 'Choose the option that best fits YOU.'
+  }
+
+  function withMeta(acc: any) {
+    const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()
+    const tMs = Math.max(0, Math.round(now - (tStart || now)))
+    let sameLikertAsPrev: boolean | undefined = undefined
+    try {
+      if (q && q.responseType.startsWith('Likert')) {
+        const prev = localStorage.getItem('prevLikertSelf') || ''
+        sameLikertAsPrev = prev && selfAnswer ? prev === selfAnswer : undefined
+      }
+    } catch {}
+    const meta = sameLikertAsPrev === undefined ? { tMs } : { tMs, sameLikertAsPrev }
+    return acc ? { ...acc, meta } : { meta }
+  }
+
+  function currentSelfPayload() {
+    if (!q) return ''
+    if (q.responseType === 'MC_MULTI') {
+      const vals = q.id === 'Q47' ? selfMulti.slice(0, 3) : selfMulti
+      return JSON.stringify(vals)
+    }
+    return selfAnswer
+  }
+
+  function hasSelf() {
+    if (!q) return false
+    return q.responseType === 'MC_MULTI' ? selfMulti.length > 0 : !!selfAnswer
+  }
 
   async function goNext() {
-    if (!selfAnswer || !importance || !acceptable) return
+    if (!hasSelf() || !importance || !acceptable) return
     const participantId = localStorage.getItem('participantId')
     const isLast = idx0 + 1 >= questions.length
-    const payload = { participantId, questionId: q.id, selfAnswer, importance: parseImportance(importance), acceptable: JSON.stringify(acceptable), final: isLast }
+    const payload = { participantId, questionId: q.id, selfAnswer: currentSelfPayload(), importance: parseImportance(importance), acceptable: JSON.stringify(withMeta(acceptable)), final: isLast }
     if (isLast) {
       setSaving(true)
       try { await saveResponse(payload); router.push('/done') } finally { setSaving(false) }
@@ -111,9 +168,9 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
   }
   async function goPrev() {
     if (idx0 === 0) return
-    if (selfAnswer && importance && acceptable) {
+    if (hasSelf() && importance && acceptable) {
       const participantId = localStorage.getItem('participantId')
-      fireAndForgetSave({ participantId, questionId: q!.id, selfAnswer, importance: parseImportance(importance), acceptable: JSON.stringify(acceptable), final: false })
+      fireAndForgetSave({ participantId, questionId: q!.id, selfAnswer: currentSelfPayload(), importance: parseImportance(importance), acceptable: JSON.stringify(withMeta(acceptable)), final: false })
     }
     router.push(`/survey/${idx0}`)
   }
@@ -125,12 +182,21 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
   function maybeAutosave() {
     try {
       if (!q) return
-      if (!selfAnswer || !importance || !acceptable) return
+      if (!hasSelf() || !importance || !acceptable) return
       const participantId = localStorage.getItem('participantId')
-      fireAndForgetSave({ participantId, questionId: q.id, selfAnswer, importance: parseImportance(importance), acceptable: JSON.stringify(acceptable), final: false })
+      fireAndForgetSave({ participantId, questionId: q.id, selfAnswer: currentSelfPayload(), importance: parseImportance(importance), acceptable: JSON.stringify(withMeta(acceptable)), final: false })
     } catch {}
   }
-  function onSetSelf(val: string) { setSelfAnswer(val); setTimeout(() => maybeAutosave(), 0) }
+  function onSetSelf(val: string) {
+    setSelfAnswer(val)
+    if (q && q.responseType.startsWith('Likert')) {
+      if (!acceptable || acceptable.mode !== 'range') {
+        setAcceptable({ mode: 'range', tol: '±1 step' })
+      }
+      try { localStorage.setItem('prevLikertSelf', val) } catch {}
+    }
+    setTimeout(() => maybeAutosave(), 0)
+  }
   function onSetImportance(val: string) { setImportance(val); setTimeout(() => maybeAutosave(), 0) }
   function onSetAcceptableRange(label: string) { setAcceptable({ mode: 'range', tol: label }); setTimeout(() => maybeAutosave(), 0) }
   function onToggleAcceptableOption(value: string, checked: boolean) {
@@ -153,6 +219,16 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
           />
         </div>
       </div>
+      {/* section intro card */}
+      {showSectionIntro && sectionIntroFor(q.section) && (
+        <div className="max-w-4xl mx-auto mb-4">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-sm font-semibold text-slate-900">{sectionIntroFor(q.section)!.title}</div>
+            <div className="text-sm text-slate-600">{sectionIntroFor(q.section)!.body}</div>
+          </div>
+        </div>
+      )}
+
       <AnimatePresence mode="wait">
         <motion.div key={q.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.3 }} className="max-w-4xl mx-auto">
           {(q.section || q.construct) && (
@@ -162,7 +238,8 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
             <h2 className="text-xl sm:text-2xl font-semibold tracking-tight mb-5 text-slate-900 leading-tight">{q.text}</h2>
             <div className="space-y-5 divide-y divide-slate-200">
               <section className="pt-0">
-                <div className="text-sm font-semibold mb-3 text-slate-800">Your answer</div>
+                <div className="text-sm font-semibold mb-1 text-slate-800">About you</div>
+                <p className="text-xs text-slate-500 mb-2">{selfHelper(q.section, q.responseType)}</p>
                 {q.responseType.startsWith('Likert') ? (
                   <div className="grid grid-cols-7 gap-2 sm:gap-3">
                     {Array.from({ length: intFromType(q.responseType) }).map((_, i) => {
@@ -172,13 +249,36 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
                       const acceptableValues = getAcceptableValues(selfAnswer, acceptable, maxValue)
                       const isAcceptable = acceptableValues.has(label)
                       const isHighlighted = isAcceptable && !isSelected && acceptable && (acceptable.mode === 'range' || acceptable.mode === 'values')
+                      const verbal = q.responseType === 'Likert7' ? LIKERT7[i] : q.responseType === 'Likert6' ? LIKERT6[i] : undefined
                       return (
-                        <label key={i} className={`choice ${isSelected ? 'choice-selected' : ''} ${isSelected ? 'scale-105' : ''} ${isHighlighted ? 'choice-acceptable' : ''}`}>
+                        <label key={i} className={`choice ${isSelected ? 'choice-selected' : ''} ${isSelected ? 'scale-105' : ''} ${isHighlighted ? 'choice-acceptable' : ''}`} aria-label={verbal || `Option ${label}`}>
                           <input className="sr-only" type="radio" name="self" value={label} onChange={() => onSetSelf(label)} />
-                          <span className="font-semibold">{label}</span>
+                          <span className="font-semibold">
+                            {label}
+                            {verbal && <span className="hidden sm:block text-xs text-slate-500 mt-0.5">{verbal}</span>}
+                          </span>
                         </label>
                       )
                     })}
+                  </div>
+                ) : q.responseType === 'MC_MULTI' ? (
+                  <div className="grid gap-2">
+                    {q.options.map(opt => {
+                      const checked = selfMulti.includes(opt.value)
+                      return (
+                        <label key={opt.value} className={`choice text-left ${checked ? 'choice-selected' : ''} ${checked ? 'scale-[1.02]' : ''} transition-transform`}>
+                          <input type="checkbox" className="sr-only" checked={checked} onChange={e => {
+                            const s = new Set(selfMulti)
+                            if (e.target.checked) s.add(opt.value); else s.delete(opt.value)
+                            const arr = [...s]
+                            setSelfMulti(arr)
+                            setTimeout(() => maybeAutosave(), 0)
+                          }} />
+                          <span className="block">{opt.label}</span>
+                        </label>
+                      )
+                    })}
+                    {q.id === 'Q47' && <div className="text-xs text-slate-500">Select up to 3.</div>}
                   </div>
                 ) : (
                   <div className="grid gap-2">
@@ -196,8 +296,8 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
               </section>
 
               <section className="pt-4">
-                <div className="text-sm font-semibold mb-2 text-slate-800">Acceptable partner answers</div>
-                <p className="text-xs text-slate-500 mb-3">Select what answers from your partner would be acceptable to you</p>
+                <div className="text-sm font-semibold mb-1 text-slate-800">Acceptable in a partner</div>
+                <p className="text-xs text-slate-500 mb-3">Which answers from a partner would still feel compatible to you for this question?</p>
                 {q.responseType.startsWith('Likert') ? (
                   <div className="grid gap-3">
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
@@ -254,13 +354,13 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
               </section>
 
               <section className="pt-4">
-                <div className="text-sm font-semibold mb-2 text-slate-800">How important is this to you?</div>
-                <p className="text-xs text-slate-500 mb-3">Indicate how much this matters in a compatible match</p>
+                <div className="text-sm font-semibold mb-1 text-slate-800">Match importance</div>
+                <p className="text-xs text-slate-500 mb-3">How much should alignment on this question influence your match score?</p>
                 <div className="grid grid-cols-5 gap-2 sm:gap-3">
                   {LIKERT5_IMPORTANCE.map(label => {
                     const isSelected = importance === label
                     return (
-                      <label key={label} className={`choice flex items-center justify-center ${isSelected ? 'choice-selected' : ''} ${isSelected ? 'scale-105' : ''} transition-transform`}>
+                      <label key={label} title="This weight affects the match algorithm only." className={`choice flex items-center justify-center ${isSelected ? 'choice-selected' : ''} ${isSelected ? 'scale-105' : ''} transition-transform`}>
                         <input className="sr-only" type="radio" name="imp" value={label} onChange={() => onSetImportance(label)} />
                         <span className="text-sm sm:text-base font-medium text-center">{label}</span>
                       </label>
@@ -272,7 +372,7 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    {!importance && !acceptable ? 'Please select acceptable partner answers and importance level to continue' : !importance ? 'Please select an importance level to continue' : 'Please select acceptable partner answers to continue'}
+                    {!importance && !acceptable ? 'Please set acceptable partner answers and match importance to continue' : !importance ? 'Please set match importance to continue' : 'Please set acceptable partner answers to continue'}
                   </div>
                 )}
               </section>
@@ -334,4 +434,3 @@ function getAcceptableValues(selfAnswer: string, acceptable: any, maxValue: numb
   
   return acceptableSet
 }
-

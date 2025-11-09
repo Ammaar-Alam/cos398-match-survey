@@ -9,12 +9,17 @@ export async function GET(req: NextRequest) {
 
   const items = (questionsRaw as any[]).sort((a,b) => (a.order ?? 0) - (b.order ?? 0))
   const qids = items.map(q => q.id)
+  if (process.env.ENABLE_IMC === 'true') {
+    const mid = Math.floor(qids.length / 2)
+    qids.splice(mid, 0, 'IMC1')
+  }
 
   const header = [
     'participantId','coupleCode','fullName','netId',
     ...qids.map(q => `SELF_${q}`),
     ...qids.map(q => `ACC_${q}`),
-    ...qids.map(q => `IMP_${q}`)
+    ...qids.map(q => `IMP_${q}`),
+    ...qids.map(q => `IMP_LABEL_${q}`)
   ]
 
   const { rows: participants } = await pool.query(
@@ -33,12 +38,19 @@ export async function GET(req: NextRequest) {
     respByPid.set(r.participant_id, m)
   }
 
+  function labelFromImportance(n: number | undefined): string {
+    if (n === undefined || n === null) return ''
+    const map: Record<number, string> = { 0: 'Irrelevant', 1: 'A little', 10: 'Somewhat', 50: 'Very', 250: 'Mandatory' }
+    return map[Number(n)] ?? ''
+  }
+
   const rows = (participants as any[]).map(p => {
     const m = respByPid.get(p.id) || new Map()
     const row = [p.id, p.couple_code, p.full_name, p.net_id]
     for (const q of qids) row.push(m.get(q)?.self ?? '')
     for (const q of qids) row.push(m.get(q)?.acc ?? '')
     for (const q of qids) row.push(m.get(q) ? String(m.get(q)!.imp) : '')
+    for (const q of qids) row.push(m.get(q) ? labelFromImportance(m.get(q)!.imp) : '')
     return row.map(v => `"${(v||'').replace(/"/g,'""')}"`).join(',')
   })
 

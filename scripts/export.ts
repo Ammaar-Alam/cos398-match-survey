@@ -12,12 +12,18 @@ import questionsRaw from '../data/questions.json'
 async function main() {
   const items = (questionsRaw as any[]).sort((a,b) => (a.order ?? 0) - (b.order ?? 0))
   const qids = items.map(q => q.id)
+  // optionally include IMC item in export when enabled to match collection
+  if (process.env.ENABLE_IMC === 'true') {
+    const mid = Math.floor(qids.length / 2)
+    qids.splice(mid, 0, 'IMC1')
+  }
 
   const header = [
     'participantId','coupleCode','fullName','netId',
     ...qids.map(q => `SELF_${q}`),
     ...qids.map(q => `ACC_${q}`),
-    ...qids.map(q => `IMP_${q}`)
+    ...qids.map(q => `IMP_${q}`),
+    ...qids.map(q => `IMP_LABEL_${q}`)
   ]
   const rows: string[][] = []
 
@@ -37,12 +43,19 @@ async function main() {
     respByPid.set(r.participant_id, m)
   }
 
+  function labelFromImportance(n: number | undefined): string {
+    if (n === undefined || n === null) return ''
+    const map: Record<number, string> = { 0: 'Irrelevant', 1: 'A little', 10: 'Somewhat', 50: 'Very', 250: 'Mandatory' }
+    return map[Number(n)] ?? ''
+  }
+
   for (const p of participants as any[]) {
     const m = respByPid.get(p.id) || new Map()
     const row: string[] = [p.id, p.couple_code, p.full_name, p.net_id]
     for (const q of qids) row.push(m.get(q)?.self ?? '')
     for (const q of qids) row.push(m.get(q)?.acc ?? '')
     for (const q of qids) row.push(m.get(q) ? String(m.get(q)!.imp) : '')
+    for (const q of qids) row.push(m.get(q) ? labelFromImportance(m.get(q)!.imp) : '')
     rows.push(row)
   }
 

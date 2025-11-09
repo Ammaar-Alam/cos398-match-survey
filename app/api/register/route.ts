@@ -9,7 +9,7 @@ const RegisterSchema = z.object({
   fullName: z.string().min(1),
   netId: z.string().optional(),
   email: z.string().email().optional().or(z.literal('').transform(() => undefined)),
-  monthsTogether: z.coerce.number().int().min(0).optional()
+  monthsTogether: z.coerce.number().int().min(12).optional()
 })
 
 export async function POST(req: NextRequest) {
