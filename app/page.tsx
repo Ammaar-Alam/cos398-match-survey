@@ -14,10 +14,10 @@ export default function Home() {
 
         <div className="bg-white border rounded-2xl shadow-sm p-6">
           <h2 className="text-lg font-semibold mb-3">About This Study</h2>
-          <p className="text-slate-600 mb-6">This study examines how personality traits, values, and lifestyle preferences relate to relationship compatibility. You and your partner will each independently complete a 50‑question survey that takes approximately 15–20 minutes.</p>
+          <p className="text-slate-600 mb-6">This study examines how personality traits, values, and lifestyle preferences relate to relationship compatibility. You and your partner will each independently complete a 50‑question survey that takes approximately 20–25 Minutes.</p>
 
           <div className="grid sm:grid-cols-3 gap-4 mb-6">
-            <Feature icon={<ClockIcon/>} title="15–20 Minutes" desc="Complete at your own pace"/>
+            <Feature icon={<ClockIcon/>} title="20–25 Minutes" desc="Complete at your own pace"/>
             <Feature icon={<ShieldIcon/>} title="Confidential" desc="Your data is secure"/>
             <Feature icon={<HeartIcon/>} title="For Couples" desc="Both partners participate"/>
           </div>

@@ -87,7 +87,7 @@ export default function Start() {
               onChange={e => setMonths(Math.max(12, Number(e.target.value || 12)))}
               className={"mt-1 w-full border rounded-md px-3 py-2 " + (months===12?'text-slate-400':'text-slate-900')}
             />
-            <p className="text-xs text-slate-500 mt-1">Minimum 12 months. Default is 12; you can increase.</p>
+            <p className="text-xs text-slate-500 mt-1">Minimum 12 months.</p>
           </div>
           <div className="flex items-center gap-3 justify-end">
             <button disabled={loading} className="px-5 py-2 rounded-md bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 shadow-sm">
