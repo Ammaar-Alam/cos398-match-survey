@@ -50,24 +50,34 @@ jobs:
           B_NAME="${{ github.event.inputs.b_first }} ${{ github.event.inputs.b_last }}"
           A_NET='${{ github.event.inputs.a_netid }}'
           B_NET='${{ github.event.inputs.b_netid }}'
-          psql "$DB_URL" <<SQL
+          psql "$DB_URL" \
+            -v code="$CODE" \
+            -v cid="$C_ID" \
+            -v aid="$A_ID" \
+            -v bid="$B_ID" \
+            -v aname="$A_NAME" \
+            -v bname="$B_NAME" \
+            -v anet="$A_NET" \
+            -v bnet="$B_NET" <<'SQL'
           BEGIN;
           INSERT INTO couples (id, code, created_at)
-          VALUES ('$C_ID', '$CODE', NOW())
+          VALUES (:'cid'::uuid, :'code', NOW())
           ON CONFLICT (code) DO NOTHING;
-          -- Resolve couple id
-          DO $$
-          DECLARE cid uuid;
+
+          DO $blk$
+          DECLARE c uuid;
           BEGIN
-            SELECT id INTO cid FROM couples WHERE code='$CODE' LIMIT 1;
-            IF cid IS NULL THEN RAISE EXCEPTION 'Couple not found after insert'; END IF;
+            SELECT id INTO c FROM couples WHERE code = :'code' LIMIT 1;
+            IF c IS NULL THEN RAISE EXCEPTION 'Couple not found after insert'; END IF;
             INSERT INTO participants (id, couple_id, full_name, net_id, started_at)
-            VALUES ('$A_ID', cid, trim('$A_NAME'), NULLIF('$A_NET',''), NOW())
+            VALUES (:'aid'::uuid, c, trim(:'aname'), NULLIF(:'anet',''), NOW())
             ON CONFLICT (couple_id, full_name) DO NOTHING;
             INSERT INTO participants (id, couple_id, full_name, net_id, started_at)
-            VALUES ('$B_ID', cid, trim('$B_NAME'), NULLIF('$B_NET',''), NOW())
+            VALUES (:'bid'::uuid, c, trim(:'bname'), NULLIF(:'bnet',''), NOW())
             ON CONFLICT (couple_id, full_name) DO NOTHING;
-          END$$;
+          END
+          $blk$;
+
           COMMIT;
           SQL
           echo "Created/ensured couple=$CODE A=$A_ID B=$B_ID"
