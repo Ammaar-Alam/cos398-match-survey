@@ -34,12 +34,12 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
       - name: Create couple and participants (psql)
         env:
-          DB_URL: ${{ secrets.DATABASE_URL || secrets.SUPABASE_DB_URL }}
+          DB_URL: ${{ secrets.DATABASE_URL }}
         shell: bash
         run: |
           set -euo pipefail
           if [ -z "${DB_URL:-}" ]; then
-            echo "::error title=Missing secret::Set repository secret DATABASE_URL (or SUPABASE_DB_URL) to your pooled DSN" >&2
+            echo "::error title=Missing secret::Set repository secret DATABASE_URL to your pooled DSN (port 6543)" >&2
             exit 1
           fi
           A_ID=$(uuidgen)
@@ -64,19 +64,17 @@ jobs:
           VALUES (:'cid'::uuid, :'code', NOW())
           ON CONFLICT (code) DO NOTHING;
 
-          DO $blk$
-          DECLARE c uuid;
-          BEGIN
-            SELECT id INTO c FROM couples WHERE code = :'code' LIMIT 1;
-            IF c IS NULL THEN RAISE EXCEPTION 'Couple not found after insert'; END IF;
-            INSERT INTO participants (id, couple_id, full_name, net_id, started_at)
-            VALUES (:'aid'::uuid, c, trim(:'aname'), NULLIF(:'anet',''), NOW())
-            ON CONFLICT (couple_id, full_name) DO NOTHING;
-            INSERT INTO participants (id, couple_id, full_name, net_id, started_at)
-            VALUES (:'bid'::uuid, c, trim(:'bname'), NULLIF(:'bnet',''), NOW())
-            ON CONFLICT (couple_id, full_name) DO NOTHING;
-          END
-          $blk$;
+          -- fetch couple id into psql variable :cid_found
+          SELECT id AS cid_found FROM couples WHERE code = :'code' LIMIT 1;
+          \gset
+
+          INSERT INTO participants (id, couple_id, full_name, net_id, started_at)
+          VALUES (:'aid'::uuid, :'cid_found'::uuid, trim(:'aname'), NULLIF(:'anet',''), NOW())
+          ON CONFLICT (couple_id, full_name) DO NOTHING;
+
+          INSERT INTO participants (id, couple_id, full_name, net_id, started_at)
+          VALUES (:'bid'::uuid, :'cid_found'::uuid, trim(:'bname'), NULLIF(:'bnet',''), NOW())
+          ON CONFLICT (couple_id, full_name) DO NOTHING;
 
           COMMIT;
           SQL
