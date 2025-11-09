@@ -10,10 +10,12 @@ const connectionString =
   ''
 
 // Enable SSL when requested or when connecting to Supabase/remote hosts
+// consider any Supabase DSN (direct or pooler) as requiring TLS, even if sslmode is omitted
 const needsSsl =
   process.env.DATABASE_SSL === 'true' ||
-  /sslmode=require/.test(connectionString) ||
-  /supabase\.co/.test(connectionString)
+  /sslmode=require/i.test(connectionString) ||
+  /supabase\.(co|com)/i.test(connectionString) ||
+  /pooler\.supabase\.com/i.test(connectionString)
 
 const ssl = needsSsl ? { rejectUnauthorized: false } : undefined
 
