@@ -153,10 +153,31 @@ def final_match(
                 except Exception:
                     return [str(row_val)]
 
-            optsA = _opts_default(a_self, accA)
-            optsB = _opts_default(b_self, accB)
-            okA = _is_ok_mc(b_self, optsA)
-            okB = _is_ok_mc(a_self, optsB)
+            def _to_list(v):
+                try:
+                    import json
+                    t = json.loads(v) if isinstance(v, str) else v
+                    return t if isinstance(t, list) else [str(v)]
+                except Exception:
+                    return [str(v)]
+
+            optsA = set(_opts_default(a_self, accA))
+            optsB = set(_opts_default(b_self, accB))
+            setA = set(_to_list(a_self))
+            setB = set(_to_list(b_self))
+
+            if rtype == 'MC_MULTI':
+                # MC_MULTI: B acceptable to A if B's set is subset of A's acceptable (or own set if none provided)
+                baseA = optsA if len(optsA) > 0 else setA
+                baseB = optsB if len(optsB) > 0 else setB
+                okA = setB.issubset(baseA)
+                okB = setA.issubset(baseB)
+            else:
+                # MC_SINGLE fallback
+                baseA = optsA if len(optsA) > 0 else setA
+                baseB = optsB if len(optsB) > 0 else setB
+                okA = str(next(iter(setB))) in baseA if setB else False
+                okB = str(next(iter(setA))) in baseB if setA else False
 
         # Only count items that are potentially relevant (any nonzero weight)
         if Wa > 0 or Wb > 0:
@@ -182,4 +203,3 @@ def final_match(
     penalty = c_penalty / (n ** 0.5)
     final = max(0.0, match - penalty)
     return (final, n, sA, sB)
-

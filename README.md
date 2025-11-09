@@ -1,5 +1,4 @@
-
-# TigerMatch Couples Survey — Minimal Web App (Next.js + Tailwind + Prisma + PostgreSQL)
+# TigerMatch Couples Survey — Minimal Web App (Next.js + Tailwind + PostgreSQL)
 
 **Purpose:** collect questionnaire data from **couples (30 couples = 60 individuals)** who have been together for 12+ months.  
 This app **only collects data**. All scoring/matching will be performed offline on exported CSV.
@@ -11,7 +10,7 @@ This app **only collects data**. All scoring/matching will be performed offline 
 ## Tech choices
 - **Next.js 14 (App Router)** + **TypeScript** for a simple full-stack.
 - **TailwindCSS** + **Framer Motion** for styling and micro-animations.
-- **Prisma** ORM + **PostgreSQL** for persistence.
+- **PostgreSQL** via pg (node-postgres) for persistence.
 - **No auth** (by request): participants enter **Couple Code**, **Full name**, **Princeton NetID**. A `participantId` is stored in localStorage for the session.
 - **Export** endpoint returns a wide CSV with columns `SELF_Q*`, `ACC_Q*`, `IMP_Q*`, and `IMP_LABEL_Q*` ready for downstream scoring.
 

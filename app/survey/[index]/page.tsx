@@ -371,6 +371,11 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
                         </label>
                       )
                     })}
+                    {q.responseType === 'MC_MULTI' && (
+                      <div className="text-xs text-slate-500 mt-1">
+                        tip: acceptable defaults to your own selections; widen it if you’re flexible
+                      </div>
+                    )}
                   </div>
                 )}
               </section>

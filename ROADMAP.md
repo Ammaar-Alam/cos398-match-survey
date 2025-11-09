@@ -42,7 +42,7 @@ Given your target (n=60 individuals now, larger pilot later) and the desire to *
 
 * **Frontend:** React (Next.js 14 App Router), **TailwindCSS**, **Framer Motion** for animations
 * **Backend:** Next.js API routes (**Node.js/TypeScript**)
-* **DB:** **PostgreSQL** with **Prisma ORM**
+* **DB:** **PostgreSQL** with **node-postgres (pg)**
 * **Auth:** None (by design). Entry screen collects **Couple Code + NetID + Name** and issues a `participantId` stored locally for the session.
 * **Hosting:** Vercel (frontend + API) + Neon/Supabase (managed Postgres) in production; Dockerized Postgres for local dev.
 
@@ -67,7 +67,7 @@ tigermatch-couples-survey/
 ├─ data/
 │  └─ questions.json            # 50 items with response types & options
 ├─ lib/
-│  └─ db.ts                     # Prisma client
+│  └─ db.ts                     # pg pool client
 ├─ scripts/
 │  └─ db-init.ts                # Create tables (Postgres SQL via node-postgres)
 ├─ scripts/
@@ -198,7 +198,7 @@ All 50 are already in `data/questions.json` and seeded into the DB via `npm run 
 cp .env.example .env
 # Set DATABASE_URL (Postgres) and ADMIN_KEY
 
-# 2) Install & generate Prisma
+# 2) Database
 npm install
 npx prisma generate
 
