@@ -3,7 +3,7 @@ from typing import Dict, Any, List, Tuple
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
-from algorithms.core import final_match, extract_priorities_from_q47
+from algorithms.core import final_match, extract_priorities_from_q47, DEFAULT_DOMAIN_MULTIPLIER
 from algorithms.variants import VARIANTS
 
 def load_meta(p:str)->Dict[str,Dict[str,Any]]:
@@ -50,6 +50,7 @@ def evaluate_variant(
     meta:Dict[str,Any],
     q47_options:Dict[str,str],
     c:float, nmin:int, sym:bool,
+    domain_weights:Dict[str,float]|None,
     nonpartner_samples:int=20,
     seed:int=123
 ):
@@ -69,7 +70,8 @@ def evaluate_variant(
         prB = extract_priorities_from_q47(rowB, q47_options)
 
         fm, n, sA, sB = final_match(rowA, rowB, meta, prA, prB,
-                                    c_penalty=c, min_overlap=nmin, symmetric_check=sym)
+                                    c_penalty=c, min_overlap=nmin, symmetric_check=sym,
+                                    domain_weights=domain_weights)
         if fm is None: 
             continue
 
@@ -84,7 +86,8 @@ def evaluate_variant(
             rowD = rows[D]
             prD = extract_priorities_from_q47(rowD, q47_options)
             fmAD, _, _, _ = final_match(rowA, rowD, meta, prA, prD,
-                                        c_penalty=c, min_overlap=nmin, symmetric_check=sym)
+                                        c_penalty=c, min_overlap=nmin, symmetric_check=sym,
+                                        domain_weights=domain_weights)
             if fmAD is not None:
                 rnd_scores.append(fmAD)
 
@@ -121,6 +124,7 @@ def main():
     ap.add_argument("--questions_json", default=None, help="(Optional) repo data/questions.json (for Q47 mapping)")
     ap.add_argument("--outdir", default="out")
     ap.add_argument("--nonpartner_samples", type=int, default=20)
+    ap.add_argument("--weights_json", default=None, help="Optional JSON with domain weights to override defaults (keys=Domains)")
     args = ap.parse_args()
 
     import os
@@ -140,11 +144,26 @@ def main():
             "4":"Daily routine compatibility", "5":"Similar background", "6":"Intellectual connection"
         }
 
+    # optional learned weights
+    weights=None
+    if args.weights_json:
+        with open(args.weights_json,'r',encoding='utf-8') as f:
+            w_raw=json.load(f)
+        # drop non-domain keys
+        cand={k: float(v) for k,v in w_raw.items() if k in DEFAULT_DOMAIN_MULTIPLIER}
+        if len(cand)>0:
+            # scale to match default sum to keep magnitude comparable
+            s_default=sum(DEFAULT_DOMAIN_MULTIPLIER.values())
+            s_cand=sum(cand.values()) or 1.0
+            scale=s_default/s_cand
+            weights={k: v*scale for k,v in cand.items()}
+
     all_summ=[]; all_rows=[]
     for v in VARIANTS:
         summ, rows = evaluate_variant(
             name=v["name"], export_df=export_df, couples_df=couples_df, meta=meta,
             q47_options=q47_options, c=v["c"], nmin=v["nmin"], sym=v["sym"],
+            domain_weights=weights,
             nonpartner_samples=args.nonpartner_samples
         )
         all_summ.append(summ)
@@ -165,4 +184,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

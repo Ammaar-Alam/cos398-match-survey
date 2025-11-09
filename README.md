@@ -85,6 +85,19 @@ Useful commands:
 - Admin requests: `GET /api/admin/export?key=YOUR_ADMIN_KEY`  
 - CSV columns: `participantId,coupleCode,fullName,netId,SELF_Q1..50,ACC_Q1..50,IMP_Q1..50,IMP_LABEL_Q1..50`
 
+### One-command workflow (export → couples → evaluate)
+From project root, with either DATABASE_URL set (DB export) or ADMIN_EXPORT_URL + ADMIN_KEY set (API export):
+
+```
+npm run alg:run
+```
+
+This CLI will:
+- Fetch/export `export.csv` (via admin API if `ADMIN_EXPORT_URL` is set, otherwise via DB)
+- Build `couples.csv` by pairing first two participants per Couple Code
+- Build `tiger-alg/meta.json`
+- Run the evaluation and write outputs to `tiger-alg/out/`
+
 ## Notes for production
 - Put Postgres behind SSL (Neon/Supabase). 
 - Restrict CORS to your domain.

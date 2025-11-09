@@ -15,7 +15,8 @@
     "db:setup": "npm run db:up && ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/db-init.ts",
     "export:csv": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/export.ts",
     "export:couples": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/export-couples.ts",
-    "couple:create": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/create-couple.ts"
+    "couple:create": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/create-couple.ts",
+    "alg:run": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/run-analysis.ts"
   },
   "dependencies": {
     "autoprefixer": "^10.4.20",

@@ -38,6 +38,22 @@ python ml/learn_domain_weights.py \
   --couples_csv couples.csv \
   --meta_json meta.json \
   --out out/ml_weights.json
+
+5) Evaluate with learned weights (sensitivity)
+
+Once `out/ml_weights.json` exists, you can override the default domain multipliers:
+
+```
+python eval/evaluate_couples.py \
+  --export_csv ../export.csv \
+  --couples_csv couples.csv \
+  --meta_json meta.json \
+  --questions_json ../data/questions.json \
+  --weights_json out/ml_weights.json \
+  --outdir out_ml
+```
+
+This scales the learned weights to the same total as the default multipliers for comparability.
 ```
 
 Expected outputs:
@@ -51,4 +67,3 @@ Notes:
 - Q47 is parsed from your `data/questions.json` so option labels map correctly to domains.
 - If an IMC item (e.g., `IMC1`) appears in the export but not in questions, it's added to `meta.json` with Domain `Quality` and contributes zero in scoring.
 - MC-MULTI (e.g., Q50) defaults acceptable to the user's own selection(s) when left blank.
-

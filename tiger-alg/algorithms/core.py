@@ -55,8 +55,9 @@ def _parse_json_maybe(s: str) -> Dict[str, Any]:
     except Exception:
         return {}
 
-def _domain_multiplier(domain: str, priorities: set[str]) -> float:
-    base = DEFAULT_DOMAIN_MULTIPLIER.get(domain, 0.0)  # unknown domains (e.g., IMC) -> 0
+def _domain_multiplier(domain: str, priorities: set[str], base_weights: Dict[str, float] | None = None) -> float:
+    weights = base_weights or DEFAULT_DOMAIN_MULTIPLIER
+    base = weights.get(domain, 0.0)  # unknown domains (e.g., IMC) -> 0
     if base == 0.0:
         return 0.0
     if domain in priorities:
@@ -95,6 +96,7 @@ def final_match(
     c_penalty: float = 100.0,
     min_overlap: int = 20,
     symmetric_check: bool = False,
+    domain_weights: Dict[str, float] | None = None,
 ) -> Tuple[float | None, int, float, float]:
     """
     Compute FinalMatch(A,B) as specified:
@@ -121,8 +123,8 @@ def final_match(
             continue
 
         # per-user domain-weighted importance
-        Wa = _importance_int(a_row.get(f"IMP_{qid}", 1)) * _domain_multiplier(domain, priorities_a)
-        Wb = _importance_int(b_row.get(f"IMP_{qid}", 1)) * _domain_multiplier(domain, priorities_b)
+        Wa = _importance_int(a_row.get(f"IMP_{qid}", 1)) * _domain_multiplier(domain, priorities_a, domain_weights)
+        Wb = _importance_int(b_row.get(f"IMP_{qid}", 1)) * _domain_multiplier(domain, priorities_b, domain_weights)
         if Wa == 0.0 and Wb == 0.0:
             # counts toward overlap only if it could matter for at least one side
             continue
