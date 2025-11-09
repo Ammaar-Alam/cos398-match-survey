@@ -5,7 +5,11 @@ import { motion } from 'framer-motion'
 
 async function createOrJoin(payload: any) {
   const res = await fetch('/api/register', { method: 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)})
-  if (!res.ok) throw new Error('Registration failed')
+  if (!res.ok) {
+    let msg = 'Registration failed'
+    try { const j = await res.json(); if (j?.error) msg = j.error } catch {}
+    throw new Error(msg)
+  }
   return await res.json()
 }
 
@@ -73,8 +77,8 @@ export default function Start() {
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="block text-sm font-medium">Princeton NetID *</label>
-              <input name="netId" required className="mt-1 w-full border rounded-md px-3 py-2"/>
+              <label className="block text-sm font-medium">Princeton NetID</label>
+              <input name="netId" placeholder="(optional)" className="mt-1 w-full border rounded-md px-3 py-2"/>
             </div>
             <div>
               <label className="block text-sm font-medium">Email</label>

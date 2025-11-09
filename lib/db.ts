@@ -32,3 +32,8 @@ if (process.env.NODE_ENV !== 'production') {
 export async function query(text: string, params?: any[]): Promise<any> {
   return pool.query(text, params)
 }
+// Optional global override for environments with corporate/self-signed proxies.
+if (process.env.ALLOW_SELF_SIGNED === 'true') {
+  // eslint-disable-next-line no-process-env
+  (process as any).env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
+}

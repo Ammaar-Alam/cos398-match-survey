@@ -92,6 +92,11 @@ Useful commands:
 - Rotate `ADMIN_KEY` frequently.
 - Add server-side throttling on `register`/`response` to avoid abuse.
 - For IRB: host consent & privacy pages; keep identifiers minimal; encrypt backups.
+ - Vercel/Supabase: set one of `DATABASE_URL` or `POSTGRES_URL` to your Supabase connection string (pooled or non-pooled). If you see `SELF_SIGNED_CERT_IN_CHAIN`, set `ALLOW_SELF_SIGNED=true` or ensure TLS CA is trusted. Our client also auto-enables TLS for `sslmode=require`/Supabase hosts.
+
+### Pre-issuing Couple Codes (admin)
+- Local script: `npm run couple:create` then follow prompts to create a couple code and the two participant records.
+- GitHub Action: `.github/workflows/create-couple.yml` provides a `workflow_dispatch` to create a code + two names against a DB. Add a repository secret `DATABASE_URL` pointing to your production DB.
 
 ## Replace PVQ wording
 PVQ-21 in `data/questions.json` is paraphrased; replace with the official ESS PVQ‑21 portraits and keep the 6‑point anchors for publication-grade fidelity. If you provide the official text, we can import it directly into `data/questions.json`.

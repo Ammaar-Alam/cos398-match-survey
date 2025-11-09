@@ -20,6 +20,15 @@ export async function POST(req: NextRequest) {
   }
   const { coupleCode, fullName, netId, email, monthsTogether } = parsed.data
 
+  // Optional env allowlist: ALLOWED_COUPLE_CODES="CODE1,CODE2"
+  const allowlist = (process.env.ALLOWED_COUPLE_CODES || '')
+    .split(',')
+    .map(s => s.trim().toLowerCase())
+    .filter(Boolean)
+  if (allowlist.length > 0 && !allowlist.includes(coupleCode.toLowerCase())) {
+    return NextResponse.json({ error: 'Couple code not permitted' }, { status: 403 })
+  }
+
   // upsert couple by code
   const coupleId = randomUUID()
   const inserted = await pool.query(
@@ -33,7 +42,10 @@ export async function POST(req: NextRequest) {
   }
 
   // find existing participant by couple + full name (resume session)
-  const existing = await pool.query('SELECT id FROM participants WHERE couple_id=$1 AND full_name=$2 LIMIT 1', [cid, String(fullName)])
+  const existing = await pool.query(
+    'SELECT id FROM participants WHERE couple_id=$1 AND lower(trim(full_name))=lower(trim($2)) LIMIT 1',
+    [cid, String(fullName)]
+  )
   if (existing.rows.length > 0) {
     return NextResponse.json({ participantId: existing.rows[0].id })
   }
