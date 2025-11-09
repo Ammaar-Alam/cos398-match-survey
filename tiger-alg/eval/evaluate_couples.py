@@ -1,4 +1,7 @@
 import json, argparse, random
+import os, sys
+# Ensure the repo root for tiger-alg is on sys.path so we can import sibling packages
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from typing import Dict, Any, List, Tuple
 import numpy as np
 import pandas as pd

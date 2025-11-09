@@ -17,6 +17,7 @@
     "export:couples": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/export-couples.ts",
     "couple:create": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/create-couple.ts",
     "alg:run": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/run-analysis.ts"
+    ,"alg:tui": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/tui.ts"
   },
   "dependencies": {
     "autoprefixer": "^10.4.20",

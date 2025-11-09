@@ -1,4 +1,7 @@
 import json, argparse, numpy as np, pandas as pd
+import os, sys
+# Ensure we can import sibling packages when run as a script
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from typing import Dict, Any, Tuple
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold
@@ -53,26 +56,45 @@ def main():
     ap.add_argument("--couples_csv", required=True)
     ap.add_argument("--meta_json", required=True)
     ap.add_argument("--out", default="out/ml_weights.json")
+    ap.add_argument("--rnd_per", type=int, default=10, help="Random non-partners per positive example")
+    ap.add_argument("--verbose", action="store_true", help="Print training details (fold AUCs, coef vectors)")
     args=ap.parse_args()
 
     export_df=pd.read_csv(args.export_csv)
     couples_df=pd.read_csv(args.couples_csv)
     meta=load_meta(args.meta_json)
 
-    X,y=build_dataset(export_df,couples_df,meta)
+    X,y=build_dataset(export_df,couples_df,meta, rnd_per=args.rnd_per)
     if len(X)==0:
         raise SystemExit("No data to fit.")
 
-    skf=StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-    aucs=[]; coefs=[]
-    for tr,te in skf.split(X,y):
+    # Handle tiny datasets gracefully
+    pos = int((y==1).sum()); neg = int((y==0).sum())
+    if args.verbose:
+        print(f"dataset: n={len(y)} (pos={pos}, neg={neg}), features={X.shape[1]}")
+    coef=None; auc=float('nan')
+    if pos >= 2 and neg >= 2:
+        n_splits = max(2, min(5, pos, neg))
+        skf=StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
+        aucs=[]; coefs=[]
+        for fold,(tr,te) in enumerate(skf.split(X,y), start=1):
+            clf=LogisticRegression(penalty="l2", C=1.0, solver="liblinear")
+            clf.fit(X[tr], y[tr])
+            aucs.append(roc_auc_score(y[te], clf.predict_proba(X[te])[:,1]))
+            coefs.append(clf.coef_[0])
+            if args.verbose:
+                ntr, nte = len(tr), len(te)
+                ptr, pte = int((y[tr]==1).sum()), int((y[te]==1).sum())
+                print(f"fold {fold}/{n_splits}: train n={ntr} (pos={ptr}), test n={nte} (pos={pte}), AUC={aucs[-1]:.3f}")
+        coef=np.mean(coefs,axis=0)
+        auc=float(np.mean(aucs))
+    else:
+        # Fit once on all data; report AUC as NaN (not meaningful with tiny n)
+        if args.verbose:
+            print(f"tiny-data fallback: training once on all data (pos={pos}, neg={neg})")
         clf=LogisticRegression(penalty="l2", C=1.0, solver="liblinear")
-        clf.fit(X[tr], y[tr])
-        aucs.append(roc_auc_score(y[te], clf.predict_proba(X[te])[:,1]))
-        coefs.append(clf.coef_[0])
-
-    coef=np.mean(coefs,axis=0)
-    auc=float(np.mean(aucs))
+        clf.fit(X, y)
+        coef=clf.coef_[0]
 
     # Convert to positive normalized multipliers (keeps interpretability)
     eps=1e-3
@@ -84,8 +106,16 @@ def main():
     import os, json as js
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
     with open(args.out,"w") as f: js.dump(learned,f,indent=2)
-    print(js.dumps(learned, indent=2))
+    if args.verbose:
+        print("raw coefficients:")
+        for d,c in zip(DOMAINS, coef):
+            print(f"  {d:12s} {float(c): .6f}")
+        print("normalized weights:")
+        for d in DOMAINS:
+            print(f"  {d:12s} {learned[d]: .6f}")
+        print(f"cv_auc={auc}")
+    else:
+        print(js.dumps(learned, indent=2))
 
 if __name__=="__main__":
     main()
-

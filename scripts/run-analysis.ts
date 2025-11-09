@@ -45,6 +45,7 @@ async function exportViaDB(outPath: string) {
   const part = await pool.query(
     `SELECT p.id, p.full_name, p.net_id, COALESCE(c.code,'') AS couple_code
        FROM participants p LEFT JOIN couples c ON c.id = p.couple_id
+       WHERE p.completed_at IS NOT NULL
        ORDER BY p.started_at ASC`
   )
   const resp = await pool.query(
@@ -75,16 +76,20 @@ function buildCouplesFromExport(exportPath: string, couplesPath: string) {
   const text = fs.readFileSync(exportPath, 'utf8')
   const lines = text.split(/\r?\n/).filter(Boolean)
   if (lines.length <= 1) throw new Error('export.csv has no data')
-  const header = lines[0].split(',').map(s => s.replace(/^"|"$/g,''))
+  const header = parseCsvLine(lines[0]).map(unquote)
   const pidIdx = header.indexOf('participantId')
   const codeIdx = header.indexOf('coupleCode')
   if (pidIdx === -1 || codeIdx === -1) throw new Error('export.csv missing participantId/coupleCode columns')
+  const selfIdxs = header.map((h,i)=> h.startsWith('SELF_') ? i : -1).filter(i=> i>=0)
   const groups = new Map<string, string[]>()
   for (let i=1;i<lines.length;i++) {
     const cols = parseCsvLine(lines[i])
     const pid = unquote(cols[pidIdx] || '')
     const code = unquote(cols[codeIdx] || '')
     if (!pid || !code) continue
+    // consider a participant complete only if all SELF_* answers are non-empty
+    const complete = selfIdxs.every(idx => (unquote(cols[idx]||'').trim() !== ''))
+    if (!complete) continue
     const arr = groups.get(code) || []
     arr.push(pid)
     groups.set(code, arr)
@@ -171,4 +176,3 @@ async function main(){
 }
 
 main().catch(e => { console.error(e); process.exit(1) })
-

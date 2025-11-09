@@ -22,9 +22,11 @@ export async function GET(req: NextRequest) {
     ...qids.map(q => `IMP_LABEL_${q}`)
   ]
 
+  // Only export participants who finished the questionnaire
   const { rows: participants } = await pool.query(
     `SELECT p.id, p.full_name, p.net_id, COALESCE(c.code,'') AS couple_code
        FROM participants p LEFT JOIN couples c ON c.id = p.couple_id
+       WHERE p.completed_at IS NOT NULL
        ORDER BY p.started_at ASC`
   )
 

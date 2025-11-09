@@ -12,7 +12,7 @@ async function main() {
     `SELECT c.code AS couple_code, p.id AS participant_id, p.started_at
        FROM participants p
        LEFT JOIN couples c ON c.id = p.couple_id
-       WHERE c.code IS NOT NULL
+       WHERE c.code IS NOT NULL AND p.completed_at IS NOT NULL
        ORDER BY c.code ASC, p.started_at ASC`
   )
   const byCode = new Map<string, string[]>()
@@ -33,4 +33,3 @@ async function main() {
 }
 
 main().catch(e => { console.error(e); process.exit(1) })
-
