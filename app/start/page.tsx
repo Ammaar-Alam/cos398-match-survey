@@ -59,7 +59,7 @@ export default function Start() {
           <div>
             <label className="block text-sm font-medium">Couple Code *</label>
             <input name="coupleCode" required placeholder="e.g., TIGER-1234" className="mt-1 w-full border rounded-md px-3 py-2"/>
-            <p className="text-xs text-slate-500 mt-1">If you're first, create one; if second, use your partner's code.</p>
+            <p className="text-xs text-slate-500 mt-1">Invitation‑only. Don’t have a code? contact the researcher to request one.</p>
           </div>
           <div className="grid gap-4 sm:grid-cols-3">
             <div>

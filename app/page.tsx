@@ -1,4 +1,3 @@
-
 'use client'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
@@ -33,11 +32,12 @@ export default function Home() {
 
           <div className="flex items-center gap-4 justify-center">
             <Link prefetch className="inline-flex px-6 py-3 rounded-md bg-brand-600 text-white hover:bg-brand-700 shadow" href="/start">Begin Questionnaire</Link>
+            <Link className="px-4 py-2 rounded-md border border-slate-300 text-slate-700 hover:bg-slate-50" href="/methods">Methods & Math</Link>
             <Link className="text-brand-700 hover:underline" href="/privacy">Privacy Policy</Link>
           </div>
         </div>
 
-        <div className="mt-8 text-center text-sm text-slate-500">Questions? Contact the research team. Participation is voluntary; you may withdraw at any time.</div>
+        <div className="mt-8 text-center text-sm text-slate-500">Questions? Contact Ammaar Alam. Participation is voluntary; you may withdraw at any time.</div>
       </motion.div>
     </div>
   )

@@ -15,14 +15,14 @@ export default function Privacy() {
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-6 mb-6">
             <h2 className="text-xl font-semibold text-slate-900 mb-3">Data Use</h2>
             <p className="text-slate-700 leading-relaxed">
-              De-identified data will be used to evaluate matching algorithms offline. All data are stored securely and will only be accessed by the research team.
+              De-identified data will be used to evaluate matching algorithms offline. All data are stored securely and will only be accessed by / for research purposes.
             </p>
           </div>
 
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-6">
             <h2 className="text-xl font-semibold text-slate-900 mb-3">Your Rights</h2>
             <p className="text-slate-700 leading-relaxed">
-              Participation is voluntary. You may withdraw at any time by contacting the research team. Your data will be handled in accordance with IRB guidelines and applicable privacy regulations.
+              Participation is voluntary. You may withdraw at any time by contacting the researcher (Ammaar Alam). Your data will be handled in accordance with IRB guidelines and applicable privacy regulations.
             </p>
           </div>
         </div>

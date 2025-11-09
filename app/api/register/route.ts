@@ -30,15 +30,26 @@ export async function POST(req: NextRequest) {
   }
 
   // upsert couple by code
-  const coupleId = randomUUID()
-  const inserted = await pool.query(
-    'INSERT INTO couples (id, code, months_together, created_at) VALUES ($1,$2,$3,NOW()) ON CONFLICT (code) DO NOTHING RETURNING id',
-    [coupleId, String(coupleCode), monthsTogether ?? null]
-  )
-  let cid = inserted.rows[0]?.id
-  if (!cid) {
-    const r = await pool.query('SELECT id FROM couples WHERE code = $1', [String(coupleCode)])
-    cid = r.rows[0].id
+  const strict = process.env.REQUIRE_PREISSUED_CODES === 'true'
+  let cid: string | undefined
+  if (strict) {
+    // require that couple code already exists (pre-issued)
+    const r = await pool.query('SELECT id FROM couples WHERE code = $1 LIMIT 1', [String(coupleCode)])
+    cid = r.rows[0]?.id
+    if (!cid) {
+      return NextResponse.json({ error: 'Invalid couple code. This study is invitation-only. Please contact the researcher to request a code.' }, { status: 404 })
+    }
+  } else {
+    const coupleId = randomUUID()
+    const inserted = await pool.query(
+      'INSERT INTO couples (id, code, months_together, created_at) VALUES ($1,$2,$3,NOW()) ON CONFLICT (code) DO NOTHING RETURNING id',
+      [coupleId, String(coupleCode), monthsTogether ?? null]
+    )
+    cid = inserted.rows[0]?.id
+    if (!cid) {
+      const r = await pool.query('SELECT id FROM couples WHERE code = $1', [String(coupleCode)])
+      cid = r.rows[0].id
+    }
   }
 
   // find existing participant by couple + full name (resume session)
