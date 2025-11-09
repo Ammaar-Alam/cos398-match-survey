@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '../../../lib/db'
 import { z } from 'zod'
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID } from 'crypto'
 
 const ResponseSchema = z.object({
   participantId: z.string().min(1),
@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid input', details: parsed.error.issues }, { status: 400 })
   }
   const { participantId, questionId, selfAnswer, acceptable, importance } = parsed.data
-  const id = uuidv4()
+  const id = randomUUID()
   await pool.query(
     `INSERT INTO responses (id, participant_id, question_id, self_answer, acceptable, importance, created_at, updated_at)
      VALUES ($1,$2,$3,$4,$5,$6,NOW(),NOW())

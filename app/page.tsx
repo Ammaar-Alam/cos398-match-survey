@@ -6,7 +6,7 @@ import Link from 'next/link'
 export default function Home() {
   return (
     <div className="container py-16">
-      <motion.div initial={{opacity:0, y:8}} animate={{opacity:1, y:0}} transition={{duration:0.4}} className="max-w-5xl">
+      <motion.div initial={{opacity:0, y:8}} animate={{opacity:1, y:0}} transition={{duration:0.4}} className="max-w-5xl mx-auto">
         <div className="text-center mb-10">
           <h1 className="text-5xl font-bold tracking-tight text-brand-700">TigerMatch Research Study</h1>
           <p className="text-slate-600 mt-3">Help us understand romantic compatibility through a comprehensive couples questionnaire</p>

@@ -157,6 +157,7 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
 
   async function goNext() {
     if (!hasSelf() || !importance || !acceptable) return
+    if (!q) return
     const participantId = localStorage.getItem('participantId')
     const isLast = idx0 + 1 >= questions.length
     const payload = { participantId, questionId: q.id, selfAnswer: currentSelfPayload(), importance: parseImportance(importance), acceptable: JSON.stringify(withMeta(acceptable)), final: isLast }
@@ -169,9 +170,9 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
   }
   async function goPrev() {
     if (idx0 === 0) return
-    if (hasSelf() && importance && acceptable) {
+    if (hasSelf() && importance && acceptable && q) {
       const participantId = localStorage.getItem('participantId')
-      fireAndForgetSave({ participantId, questionId: q!.id, selfAnswer: currentSelfPayload(), importance: parseImportance(importance), acceptable: JSON.stringify(withMeta(acceptable)), final: false })
+      fireAndForgetSave({ participantId, questionId: q.id, selfAnswer: currentSelfPayload(), importance: parseImportance(importance), acceptable: JSON.stringify(withMeta(acceptable)), final: false })
     }
     router.push(`/survey/${idx0}`)
   }

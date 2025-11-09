@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '../../../lib/db'
 import { z } from 'zod'
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID } from 'crypto'
 
 const RegisterSchema = z.object({
   coupleCode: z.string().min(1),
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
   const { coupleCode, fullName, netId, email, monthsTogether } = parsed.data
 
   // upsert couple by code
-  const coupleId = uuidv4()
+  const coupleId = randomUUID()
   const inserted = await pool.query(
     'INSERT INTO couples (id, code, months_together, created_at) VALUES ($1,$2,$3,NOW()) ON CONFLICT (code) DO NOTHING RETURNING id',
     [coupleId, String(coupleCode), monthsTogether ?? null]
@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
   }
 
   // create participant
-  const participantId = uuidv4()
+  const participantId = randomUUID()
   await pool.query(
     'INSERT INTO participants (id, couple_id, full_name, net_id, email, started_at) VALUES ($1,$2,$3,$4,$5,NOW())',
     [participantId, cid, String(fullName), netId ? String(netId) : null, email ?? null]
