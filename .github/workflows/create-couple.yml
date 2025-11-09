@@ -34,10 +34,14 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
       - name: Create couple and participants (psql)
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DB_URL: ${{ secrets.DATABASE_URL || secrets.SUPABASE_DB_URL }}
         shell: bash
         run: |
           set -euo pipefail
+          if [ -z "${DB_URL:-}" ]; then
+            echo "::error title=Missing secret::Set repository secret DATABASE_URL (or SUPABASE_DB_URL) to your pooled DSN" >&2
+            exit 1
+          fi
           A_ID=$(uuidgen)
           B_ID=$(uuidgen)
           C_ID=$(uuidgen)
@@ -46,7 +50,7 @@ jobs:
           B_NAME="${{ github.event.inputs.b_first }} ${{ github.event.inputs.b_last }}"
           A_NET='${{ github.event.inputs.a_netid }}'
           B_NET='${{ github.event.inputs.b_netid }}'
-          psql "$DATABASE_URL" <<SQL
+          psql "$DB_URL" <<SQL
           BEGIN;
           INSERT INTO couples (id, code, created_at)
           VALUES ('$C_ID', '$CODE', NOW())
