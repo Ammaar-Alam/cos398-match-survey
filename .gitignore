@@ -20,6 +20,7 @@ server/.smtp_oauth_cache.json
 node_modules
 */node_modules
 package-lock.json
+.next/
 
 # Build and Compilation Output
 out
