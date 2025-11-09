@@ -30,45 +30,40 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - run: npm ci
-      - name: Create couple and participants
+      - name: Install psql client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Create couple and participants (psql)
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        shell: bash
         run: |
-          node -e "process.env.COUPLE_CODE='${{ github.event.inputs.code }}'; process.env.A_FIRST='${{ github.event.inputs.a_first }}'; process.env.A_LAST='${{ github.event.inputs.a_last }}'; process.env.B_FIRST='${{ github.event.inputs.b_first }}'; process.env.B_LAST='${{ github.event.inputs.b_last }}'; process.env.A_NETID='${{ github.event.inputs.a_netid }}'; process.env.B_NETID='${{ github.event.inputs.b_netid }}';" && \
-          node - <<'NODE'
-          import 'dotenv/config'
-          import { pool } from './lib/db.js'
-          import { randomUUID } from 'node:crypto'
-          const code = process.env.COUPLE_CODE
-          const aFirst = process.env.A_FIRST
-          const aLast = process.env.A_LAST
-          const bFirst = process.env.B_FIRST
-          const bLast = process.env.B_LAST
-          const aNet = process.env.A_NETID || null
-          const bNet = process.env.B_NETID || null
-          function normalizeName(first, last){ return [first, last].map(s => (s||'').trim()).filter(Boolean).join(' ') }
-          const coupleId = randomUUID()
-          const aId = randomUUID()
-          const bId = randomUUID()
-          const run = async () => {
-            await pool.query('BEGIN')
-            try {
-              await pool.query('INSERT INTO couples (id, code, created_at) VALUES ($1,$2,NOW()) ON CONFLICT (code) DO NOTHING', [coupleId, code])
-              const r = await pool.query('SELECT id FROM couples WHERE code=$1', [code])
-              const cid = r.rows[0].id
-              await pool.query('INSERT INTO participants (id, couple_id, full_name, net_id, started_at) VALUES ($1,$2,$3,$4,NOW()) ON CONFLICT (couple_id, full_name) DO NOTHING', [aId, cid, normalizeName(aFirst, aLast), aNet])
-              await pool.query('INSERT INTO participants (id, couple_id, full_name, net_id, started_at) VALUES ($1,$2,$3,$4,NOW()) ON CONFLICT (couple_id, full_name) DO NOTHING', [bId, cid, normalizeName(bFirst, bLast), bNet])
-              await pool.query('COMMIT')
-              console.log(JSON.stringify({ code, coupleId: cid, partnerAId: aId, partnerBId: bId }))
-            } catch (e) {
-              await pool.query('ROLLBACK')
-              throw e
-            }
-          }
-          run().catch(err => { console.error(err); process.exit(1) })
-          NODE
-
+          set -euo pipefail
+          A_ID=$(uuidgen)
+          B_ID=$(uuidgen)
+          C_ID=$(uuidgen)
+          CODE='${{ github.event.inputs.code }}'
+          A_NAME="${{ github.event.inputs.a_first }} ${{ github.event.inputs.a_last }}"
+          B_NAME="${{ github.event.inputs.b_first }} ${{ github.event.inputs.b_last }}"
+          A_NET='${{ github.event.inputs.a_netid }}'
+          B_NET='${{ github.event.inputs.b_netid }}'
+          psql "$DATABASE_URL" <<SQL
+          BEGIN;
+          INSERT INTO couples (id, code, created_at)
+          VALUES ('$C_ID', '$CODE', NOW())
+          ON CONFLICT (code) DO NOTHING;
+          -- Resolve couple id
+          DO $$
+          DECLARE cid uuid;
+          BEGIN
+            SELECT id INTO cid FROM couples WHERE code='$CODE' LIMIT 1;
+            IF cid IS NULL THEN RAISE EXCEPTION 'Couple not found after insert'; END IF;
+            INSERT INTO participants (id, couple_id, full_name, net_id, started_at)
+            VALUES ('$A_ID', cid, trim('$A_NAME'), NULLIF('$A_NET',''), NOW())
+            ON CONFLICT (couple_id, full_name) DO NOTHING;
+            INSERT INTO participants (id, couple_id, full_name, net_id, started_at)
+            VALUES ('$B_ID', cid, trim('$B_NAME'), NULLIF('$B_NET',''), NOW())
+            ON CONFLICT (couple_id, full_name) DO NOTHING;
+          END$$;
+          COMMIT;
+          SQL
+          echo "Created/ensured couple=$CODE A=$A_ID B=$B_ID"
