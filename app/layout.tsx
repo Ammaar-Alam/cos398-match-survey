@@ -1,6 +1,8 @@
 
 import './globals.css'
 import { ReactNode } from 'react'
+import Link from 'next/link'
+import ClientHeader from './ui/ClientHeader'
 
 export const metadata = {
   title: process.env.NEXT_PUBLIC_SITE_NAME || 'TigerMatch Couples Survey',
@@ -14,8 +16,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <div className="min-h-screen flex flex-col">
           <header className="border-b bg-white/70 backdrop-blur sticky top-0 z-10">
             <div className="container py-3 flex items-center justify-between">
-              <div className="font-semibold text-brand-700">TigerMatch</div>
-              <nav className="text-sm text-slate-600">Couples Survey</nav>
+              <Link href="/" className="font-semibold text-brand-700 hover:opacity-80">TigerMatch</Link>
+              <nav className="flex items-center gap-3 text-sm text-slate-600">
+                <Link href="/" className="hover:underline">Home</Link>
+                <ClientHeader />
+              </nav>
             </div>
           </header>
           <main className="flex-1">{children}</main>

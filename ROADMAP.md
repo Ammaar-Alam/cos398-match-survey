@@ -68,8 +68,8 @@ tigermatch-couples-survey/
 │  └─ questions.json            # 50 items with response types & options
 ├─ lib/
 │  └─ db.ts                     # Prisma client
-├─ prisma/
-│  └─ schema.prisma             # PostgreSQL models
+├─ scripts/
+│  └─ db-init.ts                # Create tables (Postgres SQL via node-postgres)
 ├─ scripts/
 │  ├─ seed.ts                   # Seed DB with 50 items
 │  └─ export.ts                 # CLI export (same shape as API export)
@@ -84,66 +84,14 @@ tigermatch-couples-survey/
 
 ---
 
-# Data model (Prisma)
+## Data model (PostgreSQL)
 
-```prisma
-model Couple {
-  id             String   @id @default(cuid())
-  code           String   @unique            // Couple Code (shared by partners)
-  monthsTogether Int?
-  createdAt      DateTime @default(now())
-  participants   Participant[]
-}
+We use plain SQL tables managed by a small init script. Questions/options are served from `data/questions.json` and are not stored in DB.
 
-model Participant {
-  id          String   @id @default(cuid())
-  coupleId    String
-  couple      Couple   @relation(fields: [coupleId], references: [id])
-  fullName    String
-  netId       String
-  email       String?
-  startedAt   DateTime @default(now())
-  completedAt DateTime?
-  responses   Response[]
-}
-
-model Question {
-  id           String   @id   // "Q1" .. "Q50"
-  section      String
-  domain       String
-  construct    String
-  text         String
-  responseType String   // Likert7 | Likert6 | Likert5 | MC_SINGLE | MC_MULTI
-  order        Int
-  options      Option[]
-}
-
-model Option {
-  id         String   @id @default(cuid())
-  questionId String
-  question   Question @relation(fields: [questionId], references: [id])
-  label      String
-  value      String   // "1","2","3"... for stable exports
-  ord        Int
-}
-
-model Response {
-  id            String   @id @default(cuid())
-  participantId String
-  participant   Participant @relation(fields: [participantId], references: [id])
-  questionId    String
-  question      Question @relation(fields: [questionId], references: [id])
-
-  selfAnswer    String   // Selected option value (or Likert number as string)
-  acceptable    String   // JSON: Likert {mode:'range', tol:'Same|±1|±2|Any'} OR MC {mode:'options', opts:[...]}
-  importance    Int      // 0 | 1 | 10 | 50 | 250
-
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  @@unique([participantId, questionId])
-}
-```
+Tables:
+- couples(id UUID PK, code TEXT UNIQUE, months_together INT, created_at TIMESTAMPTZ)
+- participants(id UUID PK, couple_id UUID FK couples(id), full_name TEXT, net_id TEXT, email TEXT, started_at TIMESTAMPTZ, completed_at TIMESTAMPTZ)
+- responses(id UUID PK, participant_id UUID FK participants(id), question_id TEXT, self_answer TEXT, acceptable TEXT, importance INT, created_at TIMESTAMPTZ, updated_at TIMESTAMPTZ, UNIQUE(participant_id, question_id))
 
 ---
 

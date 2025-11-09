@@ -1,16 +1,17 @@
 
-import { prisma } from '../lib/db'
+import 'dotenv/config'
+import { pool } from '../lib/db'
 import fs from 'fs'
 import path from 'path'
+import questionsRaw from '../data/questions.json'
 
 /**
  * Exports wide CSV with columns:
  * participantId, coupleCode, fullName, netId, SELF_Q1..50, ACC_Q1..50, IMP_Q1..50
  */
 async function main() {
-  const participants = await prisma.participant.findMany({ include: { couple: true, responses: true } })
-  const questions = await prisma.question.findMany({ orderBy: { order: 'asc' } })
-  const qids = questions.map(q => q.id)
+  const items = (questionsRaw as any[]).sort((a,b) => (a.order ?? 0) - (b.order ?? 0))
+  const qids = items.map(q => q.id)
 
   const header = [
     'participantId','coupleCode','fullName','netId',
@@ -20,21 +21,28 @@ async function main() {
   ]
   const rows: string[][] = []
 
-  for (const p of participants) {
-    const map = new Map(p.responses.map(r => [r.questionId, r]))
-    const row: string[] = [p.id, p.couple?.code || '', p.fullName, p.netId]
-    for (const q of qids) {
-      const r = map.get(q)
-      row.push(r?.selfAnswer ?? '')
-    }
-    for (const q of qids) {
-      const r = map.get(q)
-      row.push(r?.acceptable ?? '')
-    }
-    for (const q of qids) {
-      const r = map.get(q)
-      row.push(r ? String(r.importance) : '')
-    }
+  const { rows: participants } = await pool.query(`
+    SELECT p.id, p.full_name, p.net_id, COALESCE(c.code,'') AS couple_code
+    FROM participants p LEFT JOIN couples c ON c.id = p.couple_id
+    ORDER BY p.started_at ASC
+  `)
+
+  const { rows: respRows } = await pool.query(
+    'SELECT participant_id, question_id, self_answer, acceptable, importance FROM responses'
+  )
+  const respByPid = new Map<string, Map<string, {self:string, acc:string, imp:number}>>()
+  for (const r of respRows as any[]) {
+    const m = respByPid.get(r.participant_id) || new Map()
+    m.set(r.question_id, { self: r.self_answer ?? '', acc: r.acceptable ?? '', imp: Number(r.importance ?? '') })
+    respByPid.set(r.participant_id, m)
+  }
+
+  for (const p of participants as any[]) {
+    const m = respByPid.get(p.id) || new Map()
+    const row: string[] = [p.id, p.couple_code, p.full_name, p.net_id]
+    for (const q of qids) row.push(m.get(q)?.self ?? '')
+    for (const q of qids) row.push(m.get(q)?.acc ?? '')
+    for (const q of qids) row.push(m.get(q) ? String(m.get(q)!.imp) : '')
     rows.push(row)
   }
 
@@ -44,4 +52,4 @@ async function main() {
   console.log(`Wrote ${outPath}`)
 }
 
-main().catch(e => { console.error(e); process.exit(1) }).finally(async () => { await prisma.$disconnect() })
+main().catch(e => { console.error(e); process.exit(1) })

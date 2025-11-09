@@ -19,11 +19,27 @@ This app **only collects data**. All scoring/matching will be performed offline 
 ```bash
 cp .env.example .env    # set DATABASE_URL and ADMIN_KEY
 npm install
-npx prisma generate
-npm run db:migrate
-npm run seed
-npm run dev
+npm run db:setup        # starts postgres (docker) and creates tables
+npm run dev             # starts Next.js dev server
 ```
+
+### Local Postgres via Docker (recommended)
+```bash
+# from project root
+docker compose up -d db
+# create tables
+npm run db:setup
+```
+
+### One-command dev workflow
+- Make sure Docker Desktop is running.
+- From project root:
+  - First-time setup: `npm run db:setup` (starts DB, generates client, applies migrations, seeds questions)
+  - Day-to-day: `npm run dev` (auto-starts DB and applies migrations if any)
+
+Useful commands:
+- `npm run db:status` — check DB container health/ports
+- `npm run db:up` / `npm run db:down` — start/stop DB container
 
 ## Data model
 - `Couple(id, code, monthsTogether)` — created on first registration with a given code.
