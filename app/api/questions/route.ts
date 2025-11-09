@@ -27,6 +27,20 @@ const PVQ_TEXT_OVERRIDES: Record<string, string> = {
   Q31: "He/she seeks every chance he/she can to have fun. It is important to him/her to do things that give him/her pleasure."
 }
 
+// Specific anchor overrides for ambiguous custom Likert items
+const ANCHORS_ENERGY5 = [
+  'Very drained', 'Somewhat drained', 'Neutral', 'Somewhat energized', 'Very energized'
+]
+
+function anchorsForQuestion(q: any): string[] | undefined {
+  const text: string = String(q.text || '').toLowerCase()
+  // matches en dash and hyphen forms
+  if (text.includes('after 3–4 hours at a large social event') || text.includes('after 3-4 hours at a large social event') || text.includes('large social event')) {
+    return ANCHORS_ENERGY5
+  }
+  return undefined
+}
+
 // transform at module load for speed
 const baseItems = (questionsRaw as any[])
   .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
@@ -36,7 +50,8 @@ const baseItems = (questionsRaw as any[])
     section: q.section,
     construct: q.construct,
     responseType: q.responseType,
-    options: (q.options || []).map((label: string, idx: number) => ({ label, value: String(idx + 1) }))
+    options: (q.options || []).map((label: string, idx: number) => ({ label, value: String(idx + 1) })),
+    anchors: anchorsForQuestion(q) || (Array.isArray(q.options) && q.responseType?.startsWith('Likert') ? q.options : undefined)
   }))
 
 export async function GET(req: NextRequest) {
@@ -51,7 +66,8 @@ export async function GET(req: NextRequest) {
       section: 'Quality Check',
       construct: 'IMC',
       responseType: 'Likert5',
-      options: []
+      options: [],
+      anchors: ['Not at all', 'A little', 'Somewhat', 'Very', 'Extremely']
     } as any)
   }
   return NextResponse.json(items, {

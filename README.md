@@ -23,6 +23,25 @@ npm run db:setup        # starts postgres (docker) and creates tables
 npm run dev             # starts Next.js dev server
 ```
 
+### Local testing workflow (end-to-end)
+1) Open two browser sessions (one incognito) on `http://localhost:3000`.
+2) Both participants go to `/start`, enter the SAME Couple Code and their own Full Name/NetID. This creates records in Postgres.
+3) Complete the survey. Q47 now enforces “Select up to 3” and allows Next once you’ve set Self, Acceptable, and Importance.
+4) Export data locally:
+```bash
+# from project root
+npm run export:csv   # writes export.csv in the repo root
+npm run export:couples  # writes couples.csv inferred from pairs per couple code
+```
+5) Run the algorithm (AUC + per-couple scores):
+```bash
+cd tiger-alg
+pip install -r requirements.txt
+python tools/build_meta_from_repo.py --questions_json ../data/questions.json --export_csv ../export.csv --out meta.json
+python eval/evaluate_couples.py --export_csv ../export.csv --couples_csv ../couples.csv --meta_json meta.json --questions_json ../data/questions.json --outdir out
+```
+Outputs will be in `tiger-alg/out/`.
+
 ### Local Postgres via Docker (recommended)
 ```bash
 # from project root
@@ -83,4 +102,5 @@ Set `ENABLE_IMC=true` in the environment to inject a single instructional manipu
 ## Keyboard navigation and UX
 - Right/Left arrows = Next/Back
 - Default acceptable (Likert) = `±1 step`; default importance = `A little (1)`
+- Q47 (Top priorities) now enforces a maximum of 3 selections for Self.
 - Mobile-friendly hit targets for choices.

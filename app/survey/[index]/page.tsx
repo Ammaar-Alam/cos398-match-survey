@@ -11,6 +11,7 @@ type Question = {
   options: { label: string; value: string }[]
   section?: string
   construct?: string
+  anchors?: string[]
 }
 
 async function fetchQuestions(): Promise<Question[]> {
@@ -56,7 +57,7 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
       setQ(qq)
       setSelfAnswer('')
       setSelfMulti([])
-      setImportance('')
+      setImportance('A little')
       setAcceptable(null)
       try { setTStart(performance.now()) } catch {}
     }
@@ -241,7 +242,7 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
                 <div className="text-sm font-semibold mb-1 text-slate-800">About you</div>
                 <p className="text-xs text-slate-500 mb-2">{selfHelper(q.section, q.responseType)}</p>
                 {q.responseType.startsWith('Likert') ? (
-                  <div className="grid grid-cols-7 gap-2 sm:gap-3">
+                  <div className={`grid ${intFromType(q.responseType) === 7 ? 'grid-cols-7' : intFromType(q.responseType) === 6 ? 'grid-cols-6' : 'grid-cols-5'} gap-2 sm:gap-3`}>
                     {Array.from({ length: intFromType(q.responseType) }).map((_, i) => {
                       const label = String(i + 1)
                       const isSelected = selfAnswer === label
@@ -249,13 +250,13 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
                       const acceptableValues = getAcceptableValues(selfAnswer, acceptable, maxValue)
                       const isAcceptable = acceptableValues.has(label)
                       const isHighlighted = isAcceptable && !isSelected && acceptable && (acceptable.mode === 'range' || acceptable.mode === 'values')
-                      const verbal = q.responseType === 'Likert7' ? LIKERT7[i] : q.responseType === 'Likert6' ? LIKERT6[i] : undefined
+                      const verbal = q.anchors?.[i] ?? (q.responseType === 'Likert7' ? LIKERT7[i] : q.responseType === 'Likert6' ? LIKERT6[i] : undefined)
                       return (
                         <label key={i} className={`choice ${isSelected ? 'choice-selected' : ''} ${isSelected ? 'scale-105' : ''} ${isHighlighted ? 'choice-acceptable' : ''}`} aria-label={verbal || `Option ${label}`}>
                           <input className="sr-only" type="radio" name="self" value={label} onChange={() => onSetSelf(label)} />
                           <span className="font-semibold">
                             {label}
-                            {verbal && <span className="hidden sm:block text-xs text-slate-500 mt-0.5">{verbal}</span>}
+                            {verbal && <span className="block text-xs text-slate-500 mt-0.5">{verbal}</span>}
                           </span>
                         </label>
                       )
@@ -269,9 +270,22 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
                         <label key={opt.value} className={`choice text-left ${checked ? 'choice-selected' : ''} ${checked ? 'scale-[1.02]' : ''} transition-transform`}>
                           <input type="checkbox" className="sr-only" checked={checked} onChange={e => {
                             const s = new Set(selfMulti)
-                            if (e.target.checked) s.add(opt.value); else s.delete(opt.value)
+                            if (e.target.checked) {
+                              // enforce max-3 for Q47 selections
+                              if (q.id === 'Q47' && s.size >= 3) {
+                                // ignore extra selection beyond 3
+                              } else {
+                                s.add(opt.value)
+                              }
+                            } else {
+                              s.delete(opt.value)
+                            }
                             const arr = [...s]
                             setSelfMulti(arr)
+                            // default acceptable for MC_MULTI to own selections when absent
+                            if (!acceptable || acceptable.mode !== 'options') {
+                              setAcceptable({ mode: 'options', opts: arr })
+                            }
                             setTimeout(() => maybeAutosave(), 0)
                           }} />
                           <span className="block">{opt.label}</span>
@@ -318,7 +332,7 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
                     {acceptable?.mode === 'values' && (
                       <div className="mt-2 pt-3 border-t border-slate-200">
                         <div className="text-sm font-medium text-slate-700 mb-2">Select specific values:</div>
-                        <div className="grid grid-cols-7 gap-2 sm:gap-3">
+                        <div className={`grid ${intFromType(q.responseType) === 7 ? 'grid-cols-7' : intFromType(q.responseType) === 6 ? 'grid-cols-6' : 'grid-cols-5'} gap-2 sm:gap-3`}>
                           {Array.from({ length: intFromType(q.responseType) }).map((_, i) => {
                             const val = String(i + 1)
                             const active = acceptable?.vals?.includes(val)
@@ -330,7 +344,14 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
                                   setAcceptable({ mode: 'values', vals: [...s] })
                                   setTimeout(() => maybeAutosave(), 0)
                                 }} />
-                                <span className="font-semibold">{val}</span>
+                                <span className="font-semibold">
+                                  {val}
+                                  {(q.anchors?.[i] || (q.responseType === 'Likert7' ? LIKERT7[i] : q.responseType === 'Likert6' ? LIKERT6[i] : undefined)) && (
+                                    <span className="block text-xs text-slate-500 mt-0.5">
+                                      {q.anchors?.[i] ?? (q.responseType === 'Likert7' ? LIKERT7[i] : q.responseType === 'Likert6' ? LIKERT6[i] : '')}
+                                    </span>
+                                  )}
+                                </span>
                               </label>
                             )
                           })}
@@ -388,7 +409,7 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
               </div>
               <div className="flex gap-3 w-full sm:w-auto">
                 <button onClick={goPrev} disabled={idx0 === 0} className="px-5 py-2.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-medium">Back</button>
-                <button disabled={!selfAnswer || !importance || !acceptable || saving} onClick={goNext} className="px-6 py-2.5 rounded-lg bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium shadow-sm">
+                <button disabled={!hasSelf() || !importance || !acceptable || saving} onClick={goNext} className="px-6 py-2.5 rounded-lg bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium shadow-sm">
                   {saving ? 'Saving…' : idx0 + 1 >= questions.length ? 'Complete' : 'Next →'}
                 </button>
               </div>
