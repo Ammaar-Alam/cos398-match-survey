@@ -348,11 +348,11 @@
     "text": "After 3\u20134 hours at a large social event, how do you typically feel?",
     "responseType": "Likert5",
     "options": [
-      "Completely drained",
-      "Somewhat tired",
-      "Neither energized nor tired",
+      "Very drained",
+      "Somewhat drained",
+      "Neutral",
       "Somewhat energized",
-      "Completely energized"
+      "Very energized"
     ],
     "order": 34
   },

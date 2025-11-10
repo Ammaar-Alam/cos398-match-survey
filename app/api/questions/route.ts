@@ -1,6 +1,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import questionsRaw from '../../../data/questions.json'
+export const runtime = 'nodejs'
 
 // Official ESS PVQ-21 portrait text overrides (ids Q11..Q31)
 const PVQ_TEXT_OVERRIDES: Record<string, string> = {

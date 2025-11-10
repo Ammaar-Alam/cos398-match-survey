@@ -4,6 +4,8 @@ import { pool } from '../../../lib/db'
 import { z } from 'zod'
 import { randomUUID } from 'crypto'
 
+export const runtime = 'nodejs'
+
 const ResponseSchema = z.object({
   participantId: z.string().min(1),
   questionId: z.string().min(1),

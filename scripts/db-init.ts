@@ -35,6 +35,7 @@ async function main() {
 
   CREATE INDEX IF NOT EXISTS idx_responses_participant ON responses(participant_id);
   CREATE UNIQUE INDEX IF NOT EXISTS uniq_participant_couple_fullname ON participants(couple_id, full_name);
+  CREATE UNIQUE INDEX IF NOT EXISTS uniq_participant_couple_fullname_ci ON participants(couple_id, lower(trim(full_name)));
   `)
   console.log('DB schema ensured')
 }

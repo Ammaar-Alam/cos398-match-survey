@@ -1,384 +1,270 @@
-# TigerMatch‑PAM v2.0
+Below is a complete, research‑grade algorithmic proposal—math, theory, and an implementation plan you can drop into `tiger‑alg/`—that (i) uses your triads *as triads*, (ii) gives principled small‑sample robustness, (iii) stays interpretable, and (iv) maps cleanly to stable matchings (with uncertainty). I call it **TRIMAP**: *Triad‑aware, **M**onotone **A**cceptability with uncertainty, and **P**robabilistic stability*.
 
-**A Triad‑Aware Monotone Probabilistic Acceptability Model with AUC‑consistent pairwise training and δ‑stable matching**
+---
 
 ## Executive summary (what’s new)
 
-* **Triad‑aware likelihood**: For each direction (A→B), every item contributes a **probability of passing A’s stated filter**, not a hard 0/1.
-  – **Likert**: a **2‑D monotone kernel** (F_i(t,d)\in[0,1]) that is **(i)** non‑decreasing in declared tolerance (t) and **(ii)** non‑increasing in self–partner distance (d=|x^A_i-x^B_i|), learned from couples via a constrained parametric family.
-  – **MC**: a **soft‑acceptance kernel** based on a **population‑estimated option similarity** (s_i(o,o')) so near‑miss answers can still partly pass a filter.
-* **Importance calibration**: Learn a **monotone map** (\lambda(\text{cat})) from ({0,1,10,50,250}) to (\mathbb R_{\ge 0}) instead of treating the categories as fixed linear weights; also **learn domain multipliers** and the **Top‑3 boost**.
-* **Uncertainty‑aware scoring**: Compute **directional satisfaction posteriors** and aggregate with a strictly increasing function (H\big(\cdot,\cdot\big)). Use a **closed‑form lower‑confidence bound (LCB)** with a Kish effective‑sample‑size correction in lieu of an ad‑hoc (c/\sqrt n) penalty.
-* **AUC‑consistent training**: Optimize a **pairwise logistic ranking loss** over **true‑vs‑decoy** comparisons built from your couples protocol; the loss is a standard AUC‑consistent surrogate.
-* **δ‑stable matching**: Produce ranked lists from **LCB scores** and run Stable Marriage (or Stable Roommates) on **incomplete lists with ties**. We prove the resulting matching is **δ‑stable** in the sense that ex‑post blocking pairs occur with probability ≤ δ under the model’s uncertainty.
+* **Triad‑aware item kernels.** For each item we model the probability that *A accepts B on that item* as a **monotone function of (distance, tolerance, importance)**, learned *hierarchically by domain* to share strength at small n. Likert tolerance is not a hard cutoff; it’s a calibrated, monotone *soft* kernel. Multiple‑choice acceptability uses a calibrated indicator with shrinkage.
+
+* **Uncertainty‑aware mutual score.** Directional satisfaction is a **Bayesian‑smoothed average** of item‑level accept probabilities with **Wilson lower bounds** to produce a *conservative* score when overlap is small. The mutual score is a *learnable generalized mean* over the two directions, with a pairwise ranking objective that is **AUC‑consistent**.
+
+* **Anytime learning.** We fit a small set of *monotone, domain‑level* parameters with stochastic pairwise logistic updates against your evaluation harness (true partners vs. sampled non‑partners). This gives incremental, checkpointable training and immediate improvements on more data.
+
+* **Stable matching under uncertainty.** From cardinal scores we derive **chance‑constrained preference lists** and run **student‑proposing Deferred Acceptance (DA)** for two‑sided cohorts; DA preserves stability and truthfulness for the proposing side on the derived lists. We also define **ρ‑stability** (no blocking pair whose *blocking probability* exceeds ρ), and provide a procedure with an explicit bound on expected blocking pairs. For one‑sided settings, we can use **Serial Dictatorship** (strategy‑proof & Pareto‑optimal) or **Probabilistic Serial** (ordinally efficient) depending on the requirement, as covered in COS 445.    
+
+* **Interpretability by design.** You get item‑/domain‑level “acceptability curves” (distance vs. probability for each tolerance label), per‑user “mandatory gates,” and decomposed contributions. All of this aligns with your seminar/IW deliverables. 
+
+This plan plugs straight into your repo and goal (better AUC on the couples dataset with clean path to matching), and aligns with the “polyglot” deployment note in your COS 398 proposal. 
 
 ---
 
-## 1) Formal setup
+## (A) Methods write‑up
 
-Let items (i=1,\dots,50). For user (A):
+### A.1  Setup and notation (triads respected)
 
-* **Self**: (x_i^A) (Likert integer or MC option(s))
-* **Acceptable**: (T_i^A) (Likert tolerance category (\in{0,1,2,3}) mapping Same→0, ±1→1, ±2→2, Any→3) or an acceptable set (S_i^A\subseteq \Omega_i) (MC)
-* **Importance**: category (c_i^A\in{0,1,10,50,250})
-* **Domain**: (d(i)\in\mathcal D={\text{Values, Communication, Lifestyle, Social, Personality, Friendship}})
-* **Top‑3 domains**: (\mathcal P_A\subset\mathcal D)
+For item (i) and user (U\in{A,B}):
 
-### 1.1 Likert acceptability kernel (A→B)
+* **Self** answer (x_i^U): Likert integer in ({1,\dots,K_i}) or MC (single/multi).
+* **Acceptable partner answers** (S_i^U): Likert tolerance (t\in{0,1,2,\infty}) for {Same, ±1, ±2, Any}; for MC a subset (S) (default: own selection[s]).
+* **Importance** (w_i^U\in{0,1,10,50,250}) and **Top‑3 domains** (\mathcal P_U).
 
-Define distance (d_i(A,B)=\min(|x_i^A-x_i^B|,3)\in{0,1,2,3}) and tolerance (t_i^A\in{0,1,2,3}).
-We model the **pass probability**:
+Let (\Delta_i(A,B):=\min(|x_i^A-x_i^B|,3)) for Likert (clip distances (\ge 3) to 3). For MC, define (g_i^U(x_i^B)\in{-1,+1}) indicating whether (x_i^B\in S_i^U) (or overlaps, for MULTI).
+
+Each item has a **domain** (d(i)\in) {Values, Communication, Lifestyle, Social, Personality, Friendship}.
+
+### A.2  Triad‑aware acceptability kernels (monotone by construction)
+
+We model the **directional acceptability probability** (“on item (i), A accepts B”) as:
+
+**Likert items.**
 [
-p_i^A(B)\equiv \Pr[\text{A accepts B on }i \mid x_i^A,x_i^B,T_i^A]
-= \sigma!\left(\alpha_i + \sum_{c=1}^{3} a_{i,c},\mathbf 1[d_i\ge c] + \sum_{r=1}^{3} b_{i,r},\mathbf 1[t_i^A\ge r]\right),
+p_i^A(B);=;\sigma!\Big(,\alpha_{d(i)}\big(t(S_i^A)-\Delta_i(A,B)\big)+\beta_{d(i)}\Big),
 ]
-with (\sigma(u)=1/(1+e^{-u})). **Monotone constraints**:
-[
-a_{i,c}\le 0\quad(\text{non‑increasing in distance}),\qquad
-b_{i,r}\ge 0\quad(\text{non‑decreasing in tolerance}).
-]
-This “cumulative step” parameterization is convex‑friendly and yields a **piecewise‑constant, shape‑constrained** 2‑D surface (F_i(t,d)).
+with (\alpha_{d}\ge 0) (steeper slope ⇒ sharper tolerances) and (\sigma) the logistic link. This enforces:
 
-### 1.2 MC acceptability kernel (A→B)
+* monotone **decrease** in distance (\Delta),
+* monotone **increase** in declared tolerance (t).
 
-Let (S_i^A\subseteq \Omega_i) be A’s accepted options (default to A’s own selection(s) if blank). Build a **population similarity** for each item (i):
+**MC_SINGLE / MC_MULTI.**
 [
-s_i(o,o')\in[0,1],\quad s_i(o,o)=1,\quad s_i(o,o')=s_i(o',o),
+p_i^A(B);=;\sigma!\Big(\beta_{d(i)}+\gamma_{d(i)},\underbrace{g_i^A(x_i^B)}*{\in{-1,+1}}\Big),\qquad \gamma*{d(i)}\ge 0,
 ]
-estimated once from the survey’s **Acceptable** sets using normalized co‑acceptance (e.g., Jaccard/PMI; we keep (s_i) fixed during training for stability and interpretability).
+so listing an option in (S_i^A) strictly raises the accept probability (monotone in “acceptability”). For MULTI we use (g=+1) when (x_i^B\cap S_i^A\neq\emptyset), else (-1).
 
-Define soft proximity of B’s answer (y) to A’s acceptable set:
-[
-\mathrm{sim}*i^A(y) ;=; \max*{o\in S_i^A} s_i(y,o).\tag{MC‑proximity}
-]
-Then
-[
-p_i^A(B)=\sigma!\big(\alpha_i^{\text{MC}}+\eta_i,\mathrm{sim}_i^A(x_i^B)\big),\quad \eta_i\ge 0
-]
-(enforces monotonicity in “how close B is to A’s accepted set”). If (S_i^A=\emptyset) (rare), default (S_i^A={x_i^A}).
+> **Mandatory semantics.** If (w_i^A=250) (“Mandatory”) and the **crisp** accept rule would fail (e.g., (\Delta>t) or (x^B\notin S)), we force (p_i^A(B)=0). This preserves the “hard constraint” meaning of *Mandatory* even while other items are softened.
 
-### 1.3 Importance calibration & domain weights
+All (\alpha,\beta,\gamma) are **domain‑level** (6 domains), for small‑sample robustness with hierarchical shrinkage.
 
-Learn a **non‑decreasing map** (\lambda:{0,1,10,50,250}\to\mathbb R_{\ge0}) with (\lambda(0)=0) via 1‑D isotonic regression or a constrained reparametrization (cumulative positive steps).
-Learn domain weights (m_d>0) and a global Top‑3 multiplier (\psi\ge 1).
+### A.3  Importance and directional satisfaction with uncertainty
 
-The **directional item weight**:
+Define a **learned, monotone** importance transform
 [
-W_i^A ;=; \lambda(c_i^A)\cdot m_{d(i)}\cdot \big(\psi\ \text{if } d(i)\in\mathcal P_A \text{ else }1\big).
+\kappa(w)=a_0 + \sum_{m} a_m,\mathbf 1{w\ge \tau_m},\qquad a_m\ge 0,
 ]
+which lets the data (not a fixed table) calibrate the spacing between {0,1,10,50,250} while preserving ( \kappa(250)\ge \kappa(50)\ge \cdots).
 
-### 1.4 Directional satisfaction, uncertainty, and pair score
+Effective per‑item weight for A:
+[
+W_i^A ;=; \kappa(w_i^A)\cdot m_{d(i)}\cdot \big(1.5;\text{if } d(i)\in\mathcal P_A \text{ else }1\big),
+]
+where (m_d\ge 0) are learned **domain multipliers** (baseline used fixed values; we learn them subject to (m_d\ge 0)).
 
-For overlap items (\mathcal I_{AB}) with (W_i^A>0), define (weighted) mean pass probability
+Let (n_A(A,B)) be the number of overlapping, relevant items (with (W_i^A>0)). Define the **Bayesian‑smoothed directional mean** and its **Wilson lower bound** (level (\delta); (z=z_{1-\delta/2})):
 [
-\hat s_A(B) = \frac{\sum_{i\in\mathcal I_{AB}} W_i^A, p_i^A(B)}{\sum_{i\in\mathcal I_{AB}} W_i^A}.
+\mu_A(B)=\frac{\sum_i W_i^A,p_i^A(B)+\lambda,\mu_0}{\sum_i W_i^A+\lambda},\qquad
+\underline s_A(B)=\text{WilsonLB}\big(\mu_A(B), n_{\rm eff}^A\big),
 ]
-Approximate (conditional) variance under independence:
+with prior (\mu_0\in(0,1)) (e.g., 0.5) and **effective sample size**
+(n_{\rm eff}^A=\frac{(\sum_i W_i^A)^2}{\sum_i (W_i^A)^2}).
+This replaces an ad‑hoc (c/\sqrt{n}) penalty with a **confidence‑calibrated** small‑overlap control.
+
+### A.4  Mutual compatibility aggregator
+
+Let the conservative **directional scores** be (\underline s_A(B)) and (\underline s_B(A)). Define the **generalized mean (power mean)** mutual score:
 [
-\widehat{\mathrm{Var}}\big[\hat s_A(B)\big] ;\approx;
-\frac{\sum_i (W_i^A)^2,p_i^A(B)\big(1-p_i^A(B)\big)}{\Big(\sum_i W_i^A\Big)^2}.
+M_\theta(A,B)=\Big(\tfrac{1}{2}\big(\underline s_A(B)^\theta+\underline s_B(A)^\theta\big)\Big)^{!!1/\theta},
 ]
-Define **Kish effective sample size**
+with learnable (\theta\le 0) (harmonic/“AND‑like” as (\theta\to -\infty), geometric at (\theta=0)). We output
 [
-n_{\mathrm{eff}}^A(B)=\frac{\Big(\sum_i W_i^A\Big)^2}{\sum_i (W_i^A)^2}.
+\mathrm{TRIMAP}(A,B)=100\cdot M_\theta(A,B).
 ]
-For confidence level (1-\delta), let (z_\delta) be the normal quantile and set the **LCB**:
+This nests your geometric mean as a special case but lets the data discover the best *mutuality* shape.
+
+### A.5  Learning objective (paired‑comparison, AUC‑consistent)
+
+Given each person (A) with their true partner (B^+) and sampled non‑partners (D^-), learn parameters
+(\Theta={\alpha_d,\beta_d,\gamma_d,m_d,\kappa,\theta})
+by minimizing the **pairwise logistic** loss
 [
-\underline s_A^\delta(B)=\max!\left{0,;\hat s_A(B) - z_\delta\sqrt{\widehat{\mathrm{Var}}[\hat s_A(B)]}\right}.
+\mathcal L(\Theta)=\sum_{A}\sum_{D^-}
+\log\big(1+\exp(-(\mathrm{TRIMAP}(A,B^+)-\mathrm{TRIMAP}(A,D^-)))\big)
++;\lambda_{\rm reg},|\Theta|^2,
 ]
-Aggregate the two directions with a strictly increasing map on ([0,1]^2). We use **additive logits** for convexity and interpretability:
-[
-\mathrm{Score}*\delta(A,B) ;=; \underbrace{\operatorname{logit}\big(\underline s_A^\delta(B)\big)}*{\in\mathbb R} + \underbrace{\operatorname{logit}\big(\underline s_B^\delta(A)\big)}_{\in\mathbb R}.
-]
-This replaces the baseline’s geometric mean and heuristic (c/\sqrt n) with a **probabilistic, variance‑aware** shrinkage.
+plus the symmetric term with roles of A/B swapped (optional). Standard results imply that such pairwise losses are **AUC‑consistent** surrogates for bipartite ranking—minimizers recover the Bayes‑optimal ordering almost surely—so optimizing (\mathcal L) directly targets your **AUC** metric. *(Proof sketch in §A.7.)*
+
+We add convex **monotonicity constraints** ((\alpha_d,\gamma_d\ge 0); nondecreasing (\kappa); (\theta\le 0)) enforced by reparameterizations (e.g., softplus/neg‑softplus).
+
+**Anytime**: optimize with mini‑batch SGD over pairs; checkpoint the small set of parameters; new couples/data give immediate incremental updates.
+
+### A.6  From scores to matching, with uncertainty
+
+1. **Ordinalization with chance constraints.** For each (A), define a trimmed list (L_A(\tau)) of candidates (B) with (\underline s_A(B)\ge \tau) and sort by (\mathrm{TRIMAP}(A,B)); similarly (L_B(\tau)). The threshold (\tau) filters edges that are too uncertain/weak.
+
+2. **ρ‑stability (chance‑constrained stability).** A matching (M) is **ρ‑stable** if there is no pair ((A,B)\notin M) such that both rank each other above their partners *and* the **blocking probability**
+   [
+   \pi_{\rm block}(A,B);=;\mathbb P!\big(,S_A(B)\ge S_A(M(A)) ;\wedge; S_B(A)\ge S_B(M(B)),\big)
+   ]
+   exceeds ( \rho), where (S_A(\cdot)) are random directional satisfactions induced by our posteriors (Wilson intervals).
+
+3. **Algorithm.** Run **student‑proposing DA** on the trimmed lists (L_A(\tau)) (students⇄universities is just a label—pick a side). DA terminates in a stable matching for the induced preferences and is **strategy‑proof for the proposing side** on these lists. Moreover, with the trimming rule and our lower bounds, the returned matching is **ρ‑stable** on the latent utilities with ( \rho\approx \delta) (proof sketch: the only high‑probability blocking pairs are screened by the lower‑bound comparisons).  
+
+> One‑sided friendship/cohort pairing: use **Serial Dictatorship** (strategy‑proof & Pareto‑optimal) when fairness is defined ex‑ante by a random order; use **Probabilistic Serial** when ordinal efficiency is paramount (it is ETOE & ordinally efficient, though not strategy‑proof).  
+
+*(Your COS 398 proposal also contemplates an LP over the stable‑matching polytope; DA gives the canonical stable solution; a “best‑stable” selection can be added on top if you prefer an LP refinement step.)* 
+
+### A.7  Theoretical notes (proof sketches)
+
+* **AUC‑consistency.** Let (\eta(A,B)=\Pr(Y=1\mid A,B)) be the true couple indicator regression. The Bayes‑optimal ranking orders by (\eta). Under mild regularity, the minimizer of the pairwise logistic risk over a rich function class yields scores (f) with the same pairwise ordering as (\eta) almost surely (standard bipartite ranking theory). Thus minimizing (\mathcal L) targets AUC.
+
+* **Monotonicity and identifiability.** With (\alpha_d,\gamma_d\ge 0) and the mandatory gate, the kernels satisfy: (i) if tolerance increases or distance decreases, (p_i^A(B)) weakly increases; (ii) for MC, adding an option to (S) can only increase (p). These preserve triad semantics, so fitted parameters remain interpretable.
+
+* **Small‑overlap control.** Let (\hat\mu_A(B)) be the smoothed mean and (n_{\rm eff}^A) the effective sample size. The Wilson bound (\underline s_A(B)) satisfies (\Pr(\underline s_A(B)\le \mu_A(B))\ge 1-\delta), and (\underline s_A(B)) tightens like (O(1/\sqrt{n_{\rm eff}})). Consequently (M_\theta) of the two lower bounds yields a **conservative mutual score** with the same rate, replacing heuristic (c/\sqrt{n}) penalties by calibrated inference.
+
+* **ρ‑stability bound.** If DA on trimmed lists yields matching (M) and we trim at threshold (\tau) computed from Wilson lower bounds at level (\delta), then any off‑matching pair ((A,B)) with both lower bounds below the partner comparisons has blocking probability at most ( \rho\approx 2\delta) (union bound). Hence the expected number of blocking pairs is (O(\rho,n)) in a cohort of size (n).
+
+### A.8  Complexity and robustness
+
+* **Scoring.** One pass over overlapping items per pair; parameters at domain level keep constants small.
+* **Learning.** (O(#\text{pairs})) per epoch with mini‑batches.
+* **Matching.** DA runs in (O(n^2)) in the worst case (or (O(n,\text{avg list length}))). 
+* **Missingness/misreporting.** Missing items simply drop into (n_{\rm eff}); heavy use of *Mandatory* acts as a hard filter; the Bayesian smoothing reduces volatility for sparse overlaps.
 
 ---
 
-## 2) Learning objective (AUC‑consistent pairwise ranking)
-
-Your evaluation cares about **“partner outranks decoys”**. Train parameters
-(\Theta={\alpha_i,a_{i,\cdot},b_{i,\cdot},\alpha_i^{\mathrm{MC}},\eta_i, \lambda(\cdot), m_d,\psi})
-by minimizing the **pairwise logistic loss** over triples ((A,P,D)) (true partner (P) and a sampled non‑partner (D)):
-
-[
-\mathcal L(\Theta)=\sum_{A}\sum_{D\sim\mathcal N(A)}
-\log\Big(1+\exp\big(-[\mathrm{Score}*\delta(A,P)-\mathrm{Score}*\delta(A,D)]\big)\Big)
-;+; \mathcal R(\Theta).
-]
-
-(\mathcal R) contains: (i) (\ell_2) on free parameters; (ii) small quadratic priors anchoring (m_d) and (\psi) near the baseline multipliers; (iii) barrier terms to enforce the monotone sign constraints (e.g., parameterize (a_{i,c}=-\text{softplus}(\tilde a_{i,c})), (b_{i,r}=+\text{softplus}(\tilde b_{i,r})), (\eta_i=\text{softplus}(\tilde \eta_i)), steps for (\lambda) with softplus).
-
-**Consistency (sketch).** The pairwise logistic is a standard AUC surrogate: if the scoring class contains the Bayes‑optimal difference function and the loss is proper/strictly convex in score differences, minimizers are **AUC‑consistent** (risk convergence implies AUC convergence). Our score is strictly increasing in each directional LCB; as sample size grows, LCB→truth and the function class induced by the monotone kernels can represent any antitone/isotone step surface on ({0,1,2,3}^2), hence contains the Bayes score on this discretization. (Full proof can go in the paper.)
-
----
-
-## 3) Theoretical properties (high‑level)
-
-**P1. Monotonicity** (exact).
-By construction (F_i(t,d)) is non‑decreasing in (t) and non‑increasing in (d); (\lambda) is non‑decreasing; therefore, for fixed (B), **raising A’s tolerance/importance never decreases** (\hat s_A(B)).
-
-**P2. Confidence‑aware shrinkage** (finite‑sample).
-Under item‑wise conditional independence, (\underline s_A^\delta(B)) is a valid one‑sided normal LCB:
-(\Pr[s_A(B)\ge \underline s_A^\delta(B)]\gtrsim 1-\delta). Aggregating through (\operatorname{logit}(\cdot)), which is increasing, preserves coverage.
-
-**P3. AUC‑consistency** (asymptotic).
-Given i.i.d. couples and non‑partners sampled as in your protocol, the pairwise logistic on score differences is **Fisher consistent** for maximizing the probability that the true pair outranks a random non‑partner. (We will include a formal statement and references in the methods PDF.)
-
-**P4. δ‑stability of the matching** (probabilistic).
-Let (\pi) be a matching produced by running Stable Marriage/Roommates on rankings **induced by (\mathrm{Score}_\delta)**. Then, with probability at least (1-2\delta) (union bound across two directions), no pair ((u,v)) forms a blocking pair under the unshrunk latent satisfactions, because any blocking would require both (u) and (v) to prefer each other **above their LCB‑ranked partners**, contradicting the LCB coverage. (We provide a precise lemma in the PDF.)
-
----
-
-## 4) Mapping to matching and incentives
-
-### 4.1 From scores to ranked lists
-
-For each person (A), define a **directed** preference score to each candidate (B):
-[
-R_A(B)=\operatorname{logit}\big(\underline s_A^\delta(B)\big).
-]
-Create **incomplete lists** by removing any (B) for which either
-(i) (\underline s_A^\delta(B)) falls below a deployment threshold (\tau) (e.g., 0.2), or
-(ii) any “Mandatory” item has (\Pr[\text{pass}]) below a hard cap (e.g., (<0.1)).
-Break ties by tiny deterministic jitter on (R_A(B)) for algorithmic convenience.
-
-### 4.2 Stable matching with uncertainty
-
-* **Bipartite cohorts**: run **Gale‑Shapley** on the incomplete lists.
-* **Non‑bipartite cohorts**: run **Stable Roommates with Ties and Incomplete lists (SRTI)** (Irving + tie handling).
-
-**Guarantee (sketch)**: Using LCB‑based rankings yields a matching that is **δ‑stable** in the probabilistic sense above. This provides a principled replacement for the baseline’s overlap penalty during deployment.
-
-### 4.3 Incentives
-
-* **Importance**: Since (\hat s_A(B)) is increasing in (\lambda(c)) and we optimize a symmetric mutual score, unilateral inflation of importance can distort others’ preferences toward/away from (A). The mechanism is **not strategy‑proof** (as with classic stable matching), but the **Top‑3 boost (\psi)** is learned globally and monotone, keeping reporting incentives transparent. We document this in the paper.
-* **Tolerance**: raising tolerance weakly raises (A)’s outgoing rankings, which **cannot hurt** A in Gale‑Shapley if A is a proposer; if A is a receiver, effects are ambiguous (standard).
-
----
-
-## 5) Implementation plan (drop‑in)
+## (B) Reproducible implementation (drop‑in)
 
 ```
 tiger-alg/
   models/
-    accept_kernels.py        # Likert & MC kernels with monotone parameterizations
-    importance_map.py        # λ: isotonic or positive cumulative steps
-    domain_weights.py        # m_d and ψ with priors/regularizers
-    mc_similarity.py         # build s_i(o,o') from Acceptable sets in export.csv
+    trimap_kernels.py        # Likert/MC kernels (monotone), Wilson bounds
+    importance.py            # κ(w) transform and domain multipliers m_d
+    mutual_aggregator.py     # generalized mean M_θ
   train/
-    data.py                  # loaders from export.csv / couples.csv / meta.json
-    pair_sampler.py          # true-vs-decoy triples per A with N decoys
-    loss.py                  # pairwise logistic on Scoreδ differences
-    trainer.py               # SGD/Adam, early stopping on val AUC
+    pair_dataset.py          # builds (A, B+, {D-}) from export.csv, couples.csv
+    optimize.py              # SGD loop w/ constraints, checkpoints
+    config.yaml              # δ, τ, priors, negatives-per-anchor, etc.
   scoring/
-    directional.py           # compute p_i^A(B), ŝ, Var, n_eff, LCB
-    pair_score.py            # Scoreδ(A,B) = logit(LCB_A) + logit(LCB_B)
-    score_pairs_cli.py       # emits scores.csv (A,B,score,overlap,neffA,neffB,...)
+    score_pairs.py           # emits scores.csv (A,B,score,overlap,dirLB_A,dirLB_B,...)
+    to_preferences.py        # builds trimmed lists L_A(τ), L_B(τ)
+    match_da.py              # student-proposing DA on trimmed lists (ρ-stable)
+    match_one_sided.py       # serial dictatorship / probabilistic serial
   eval/
-    evaluate_pam.py          # mirrors baseline metrics + CIs + permutation null
-    plots.py                 # interp visuals (distance–tolerance surfaces, λ, m_d)
-  matching/
-    rankings.py              # build incomplete lists from LCBs + thresholds
-    stable.py                # Gale-Shapley & SRTI (ties, incompletes)
-    deploy_note.md           # δ-stability statement and knobs
+    evaluate_couples.py      # mirrors your harness; computes AUC/Hit@K/lift, CIs
+    ablations.py             # toggles for study in §C
+    plots_interpret.py       # item/domain curves, influence bars
   README.md
 ```
 
-### 5.1 CLI contract
+**Inputs:** `export.csv`, `couples.csv`, `meta.json` (your existing format).
+**Outputs:**
 
-* **Train**
+* `scores.csv`: `A,B,score,dirLB_A,dirLB_B,n_eff_A,n_eff_B,overlap_items,...`
+* `summary.csv`: AUC, median rank, Hit@K, lift + bootstrap CIs & partner‑shuffle permutation.
 
-  ```
-  python -m train.trainer \
-    --export_csv ../export.csv \
-    --couples_csv ../couples.csv \
-    --meta_json meta.json \
-    --outdir out_pam \
-    --negatives 20 --delta 0.10 --seed 1
-  ```
+**CLI (illustrative).**
 
-* **Score**
+```bash
+# train TRIMAP
+python train/optimize.py \
+  --export_csv ../export.csv \
+  --couples_csv ../couples.csv \
+  --meta_json meta.json \
+  --outdir out_trimap
 
-  ```
-  python -m scoring.score_pairs_cli \
-    --export_csv ../export.csv \
-    --meta_json meta.json \
-    --model out_pam/model.pt \
-    --delta 0.10 \
-    --out scores.csv
-  ```
+# score all pairs and evaluate
+python scoring/score_pairs.py --export_csv ../export.csv --meta_json meta.json --model out_trimap/best.ckpt --out scores.csv
+python eval/evaluate_couples.py --scores_csv scores.csv --couples_csv ../couples.csv --outdir out_trimap_eval
 
-* **Evaluate**
-
-  ```
-  python -m eval.evaluate_pam \
-    --scores_csv scores.csv \
-    --couples_csv ../couples.csv \
-    --out summary.csv
-  ```
-
-* **Match** (optional for cohort deployments)
-
-  ```
-  python -m matching.rankings \
-    --scores_csv scores.csv --delta 0.10 --tau 0.20 --out lists.json
-  python -m matching.stable --lists lists.json --mode bipartite --out matching.json
-  ```
-
-### 5.2 Core pseudocode (training loop)
-
-```python
-# build MC similarities once
-S = build_mc_similarity(export_csv, meta_json)  # dict[item_id] -> |Ω_i|x|Ω_i| matrix in [0,1]
-
-# prepare triples (A, partner(A), D)
-triples = sample_true_vs_decoys(couples_csv, export_csv, N=negatives)
-
-# initialize monotone-constrained params (reparam via softplus to enforce signs)
-Θ = init_params(meta_json, warm_start_from_baseline=True)
-
-for epoch in range(E):
-    for batch in minibatch(triples, B):
-        # forward: Scoreδ(A,P) - Scoreδ(A,D)
-        diff = []
-        for (A,P,D) in batch:
-            sA_P, vA_P = directional_stats(A,P, Θ, S)   # ŝ and Var (Likert + MC kernels)
-            sP_A, vP_A = directional_stats(P,A, Θ, S)
-            sA_D, vA_D = directional_stats(A,D, Θ, S)
-            sD_A, vD_A = directional_stats(D,A, Θ, S)
-
-            LCB_AP = logit(lcb(sA_P,vA_P,delta)) + logit(lcb(sP_A,vP_A,delta))
-            LCB_AD = logit(lcb(sA_D,vA_D,delta)) + logit(lcb(sD_A,vD_A,delta))
-            diff.append(LCB_AP - LCB_AD)
-
-        loss = mean(log1p(exp(-torch.tensor(diff)))) + R(Θ)
-        loss.backward(); optimizer.step(); optimizer.zero_grad()
+# build preference lists and run DA with uncertainty-aware trimming
+python scoring/to_preferences.py --scores_csv scores.csv --tau 0.55 --out prefs.json
+python scoring/match_da.py --prefs prefs.json --out matching.json
 ```
 
-All kernels are differentiable; the sign constraints are enforced by parameterization, so we don’t need a constrained optimizer.
+> DA/stability properties used here follow the COS 445 development of DA (existence/stability) and incentives (proposing side), which is precisely why we adopt DA for the ordinalized lists.  
 
 ---
 
-## 6) How this beats the baseline (why it should work)
+## (C) Ablation & sensitivity study (what matters)
 
-1. **From binary to probabilistic acceptability.** The baseline throws away signal whenever (d>t) by setting a hard zero. Our (F_i(t,d)) learns how much “too far” still helps, **item‑by‑item**.
-2. **Learning the importance scale.** ({0,1,10,50,250}) is an ordinal report, not a calibrated metric. (\lambda(\cdot)) lets the data discover how steep the scale should be for discrimination.
-3. **MC near‑misses.** The similarity kernel lets “accepted neighbors” contribute — especially valuable on small samples where strict set membership is brittle.
-4. **Principled small‑overlap handling.** The LCB replaces a hand‑tuned (c/\sqrt n) with a **variance‑aware** shrinkage and an interpretable δ knob.
-5. **Direct optimization of what you measure.** Pairwise logistic aligns training with your AUC/Hit@K decision rule.
+1. **Mutual aggregator.** Fix kernels, swap: harmonic vs. geometric vs. arithmetic mean (θ = −1, 0, +1).
+2. **Uncertainty control.** Replace Wilson lower bound with (i) no penalty; (ii) your (c/\sqrt{n}) penalty; (iii) Jeffreys prior Beta bounds.
+3. **Importance handling.** Fixed domain multipliers + raw weights (baseline) vs. learned (\kappa(w), m_d).
+4. **Kernels.** Hard tolerance (baseline) vs. monotone soft tolerance (TRIMAP).
+5. **Trim threshold τ.** Sweep τ ∈ {0.5, 0.55, 0.6, 0.65}; report fraction of edges kept, match rate, and ρ‑blocking estimates.
+6. **Overlap sensitivity.** Bin pairs by overlap; show AUC lift vs. baseline per bin.
+7. **Personalization.** With/without the Top‑3 domain boost.
 
----
-
-## 7) Ablations & sensitivity (deliverable C)
-
-* **A1**: Remove LCB (use raw (\hat s)) → quantify the value of uncertainty.
-* **A2**: Replace learned (\lambda) with identity on ({0,1,10,50,250}).
-* **A3**: Freeze domain weights to baseline vs. learn (m_d,\psi).
-* **A4**: Likert hard thresholds (baseline indicator) vs. learned (F_i(t,d)).
-* **A5**: MC exact‑set check vs. soft similarity.
-* **A6**: Aggregator comparison: additive logits (ours) vs. geometric mean (baseline) vs. arithmetic mean.
-* **A7**: Penalty comparison: LCB vs. (c/\sqrt n) tuned via CV.
-* **A8**: Negative‑sampling rate (N\in{5,10,20,50}).
-* **A9**: δ in ({0.05,0.10,0.20}) for the score and for matching.
-
-Each ablation re‑runs the exact evaluation harness to report AUC, median‑rank, Hit@K, lift, and paired‑bootstrap CIs (your existing protocol).
+All ablations report AUC, median rank, Hit@K, lift, with **paired bootstrap CIs** and a **partner‑shuffle permutation** as your null (unchanged). *(Matches your evaluation protocol.)*
 
 ---
 
-## 8) Interpretability (deliverable D)
+## (D) Interpretability & deliverables
 
-We emit the following artifacts per run:
+* **Acceptability curves.** For each domain and tolerance label, plot (p(\Delta)) vs. distance (Likert), and the MC “in‑S vs. not‑in‑S” lift.
+* **Item/domain influence.** Decompose each pair score into weighted item contributions; show domain‑level Shapley‑style or simple weight×sensitivity bars.
+* **Mandatory gates audit.** List which *Mandatory* items eliminated otherwise‑high scores (useful for user‑facing explanations).
+* **Uncertainty dashboards.** For each pair, show (n_{\rm eff}) and the gap between (\mu) and (\underline s); this explains small‑overlap conservatism.
 
-* **Distance–tolerance surfaces** (F_i(t,d)) for Likert items: 4×4 heatmaps (monotone by design).
-* **Importance calibration curve** (\lambda): a 5‑point monotone step plot with bootstrap CIs.
-* **Domain weights** (m_d) and Top‑3 multiplier (\psi) with CIs.
-* **Item influence**: average **marginal contribution** (\Delta_i = \mathbb E_{(A,B)}[W_i^A,(p_i^A(B)-\bar p_i)]) where (\bar p_i) is the item’s population mean pass probability; domain‑level aggregation yields contribution bars.
-* **Per‑pair explanations**: for any pair ((A,B)) in `scores.csv` we attach the top (k) positive/negative item contributions (W_i^A (p_i^A(B)-0.5)) and (W_i^B (p_i^B(A)-0.5)).
-
----
-
-## 9) Complexity & “anytime” updates
-
-* **Scoring**: (O(|\mathcal I_{AB}|)) per direction.
-* **Training**: For (C) couples, negatives (N), epochs (E): (O(E\cdot C\cdot N\cdot \bar I)), with (\bar I) mean overlap (≤50). CPU‑friendly (tens of seconds to minutes on pilot).
-* **Streaming**: SGD on new triples supports **incremental checkpoints**; the MC similarities can be recomputed periodically (or held fixed).
+These figures map directly to your IW seminar’s expectations for talks and final papers (sections on Approach/Evaluation/Interpretability). 
 
 ---
 
-## 10) Robustness & small‑sample notes
+## Why this meets your project goals
 
-* **Regularization**: (\ell_2) on all free parameters; shrink (a_{i,c},b_{i,r}) toward 0 (flat surface) when data are scarce.
-* **Pooling**: If desired, pool items within a domain by tying (\alpha_i) across the domain (hierarchical variant in the PDF).
-* **Missingness**: Items with (W_i^A=0) or unanswered are ignored in sums; effective sample size (n_{\mathrm{eff}}) automatically reflects sparsity/weight concentration.
-* **Default MC acceptance**: If Acceptable is blank, we set (S_i^A={x_i^A}) (your current rule) and the model still gains from soft similarity via (s_i).
+* **Uses the triad deeply.** Tolerance becomes **calibrated** softness with explicit monotonicity; *Mandatory* retains its hard constraint; importance is learned but monotone; Top‑3 domains are respected.
 
----
+* **Has formal properties.** AUC‑consistency of the surrogate; calibrated small‑n bounds; and a **ρ‑stability** guarantee after matching (with DA’s usual stability/truthfulness on the derived lists).  
 
-## 11) What goes in the **methods PDF** (deliverable A)
+* **Improves discrimination.** By training the mutuality parameter θ, the kernels, and domain/importance weights with a pairwise objective targeting AUC, TRIMAP is designed to lift AUC over the fixed‑rule baseline.
 
-1. **Model**: data, kernels (F_i(t,d)), MC similarity construction, (\lambda), (m_d,\psi).
-2. **Learning**: pairwise logistic; constraints via reparam.; regularization; complexity.
-3. **Theory**: monotonicity lemma; AUC‑consistency theorem (with assumptions); LCB coverage; δ‑stability lemma; proof sketches + references.
-4. **Robustness**: small‑sample behavior; independence approximation; misreporting discussion.
-5. **Matching**: lists from LCBs; choice of τ and δ; properties; deployment knobs.
-6. **Ethics**: no sensitive features; uncertainty surfaced to users; caveats on interpretability.
+* **Remains interpretable.** All parameters live at the domain level with monotonic constraints; output artifacts (curves, weights, gates) are human‑readable.
+
+* **Maps cleanly to matching.** DA on trimmed lists (two‑sided) and SD/PS (one‑sided) give textbook‑quality mechanisms with documented properties from COS 445; you may optionally layer a “best‑stable” LP selection if desired.  
+
+* **Practical and anytime.** A tiny parameter set, SGD updates, and checkpointed training enable incremental improvements as more couples arrive—matching your independence‑work cadence. 
 
 ---
 
-## 12) Expected repository outputs (deliverables B, C, D)
+## Appendix: brief mapping to your existing baseline & proposal
 
-* `scores.csv`: `A,B,score,dir_s_A,dir_s_B,lcb_A,lcb_B,n_eff_A,n_eff_B,overlap_items,...`
-* `summary.csv`: AUC, median‑rank, Hit@K, lift, paired‑bootstrap CIs, permutation p‑value.
-* `interp/` figures: (F_i(t,d)) grids; (\lambda) curve; (m_d,\psi) bars; item and domain contributions.
-* `matching.json`: (optional) stable matching with δ‑stability setting and reasons for any incomplete lists.
+* Your baseline computes hard accept indicators plus a geometric mutual mean and a heuristic small‑overlap penalty. TRIMAP replaces (i) **hard indicators** with **monotone probabilities**, (ii) **heuristic penalties** with **Wilson bounds**, and (iii) **fixed multipliers** with **learned, monotone transforms**—*while* retaining Mandatory semantics and domain/top‑3 personalization.
 
----
+* Your COS 398 proposal mentions DA/Irving/TTC and LP‑based “best‑stable” selection; TRIMAP plugs into that downstream layer, and its ρ‑stability definition makes stability under uncertainty explicit. 
 
-## 13) Comparison to your baseline (control to beat)
-
-* **Where it generalizes the baseline**
-  – If we force (a_{i,1}=a_{i,2}=a_{i,3}=-\infty) except at (d\le t), and (\lambda) identity, and (\psi,m_d) fixed, **PAM collapses to v1.0** up to the aggregator.
-* **Where it improves**
-  – Learns **soft edges** at item level; calibrates **importance**; handles **small overlap** via **LCB**; optimizes the **pairwise decision rule** you actually evaluate.
+* For one‑sided (friendship) releases, you can adopt SD (IC & Pareto‑optimal) or PS (ETOE & ordinally efficient) depending on whether you want truthfulness or efficiency as the primary desideratum.  
 
 ---
 
-## 14) Sensible defaults (to run today)
+### References to course notes (for mechanism properties you’ll cite in your paper)
 
-* Negatives per person (N=20) (as in your eval).
-* (\delta=0.10) for scoring LCBs (tunable; keep same at matching time).
-* Learning rate (1\mathrm{e}{-2}), Adam, batch 128 triples, early stop on val AUC.
-* Regularization: weight decay (1\mathrm{e}{-4}); Gaussian priors for (m_d,\psi) centered at your baseline multipliers (stdev 0.5 on log‑scale).
-* MC similarity (s_i): Jaccard of co‑acceptance across participants (clip to ([0,1])); cache matrices.
-
----
-
-### Appendix: concise proofs (for the methods draft)
-
-* **Monotonicity**: In the Likert kernel, (d\mapsto\sum_c a_{i,c}\mathbf 1[d\ge c]) is a sum of non‑positive steps; (t\mapsto\sum_r b_{i,r}\mathbf 1[t\ge r]) is a sum of non‑negative steps; the logistic is increasing ⇒ (F_i) is antitone in (d), isotone in (t). The MC kernel is isotone in (\mathrm{sim}) by (\eta_i\ge 0). (\lambda) is monotone by construction; hence directional satisfaction is monotone in tolerance and importance.
-* **AUC‑consistency (sketch)**: The pairwise logistic risk on score differences is a proper composite loss; if (\mathrm{Score}\in\mathcal F) where (\mathcal F) contains the Bayes score difference (which, on the finite grid ({0,1,2,3}^2), can be represented by (F_i) via step functions), minimizing the surrogate implies maximizing the AUC in the limit.
-* **δ‑stability (sketch)**: For any pair ((u,v)), if (\underline s_u^\delta(v)\le \underline s_u^\delta(\pi(u))) or (\underline s_v^\delta(u)\le \underline s_v^\delta(\pi(v))) in the constructed lists, then with probability ≥ (1-\delta) each inequality persists for the true (s); taking both directions and union bound gives ≤ (2\delta) chance of a true blocking pair.
+* **DA existence & stability;** worked example and complexity. 
+* **Incentive compatibility (proposing side) of DA.** 
+* **Serial Dictatorship & Pareto‑optimality; Top Trading Cycles.** 
+* **Probabilistic Serial, ETOE, and ordinal efficiency.** 
 
 ---
 
-## What I’ll provide right away in code (mapped to your repo)
+## What you’ll commit to the repo (concrete)
 
-* Monotone Likert and MC kernels with differentiable, sign‑constrained params.
-* λ importance calibration and learned (m_d,\psi).
-* Directional satisfaction + LCB with Kish (n_{\mathrm{eff}}).
-* Pairwise logistic training loop with your negative‑sampling protocol.
-* Scoring → `scores.csv`; evaluation → `summary.csv`; plots.
-* Matching utilities producing δ‑stable lists and a final matching.
+* A self‑contained `models/` + `train/` + `scoring/` + `eval/` scaffold (above) that consumes `export.csv`, `couples.csv`, `meta.json`, and produces `scores.csv` + `summary.csv`, with ablation toggles and plotting scripts.
 
-If you want me to tailor the naming and CLI switches to exactly match your existing `evaluate_couples.py` interface, I’ll mirror those argument names so you can run both the **baseline** and **PAM** with the same wrappers.
+* A methods PDF (camera‑ready style) following the outline above (Problem, Model, Objective, Theory, Complexity, Robustness, Matching, Incentives/Fairness), plus the ablation study and interpretability figures—aligned to the COS IW handbook’s format & deadlines. 
 
 ---
 
-### Quick checklist against your §7
+### Optional extensions (if data grows)
 
-1. **Uses the triad deeply**: yes — SELF enters via distance; ACCEPTABLE via tolerance/set; IMPORTANCE via learned λ; domains via learned (m_d) and Top‑3 boost.
-2. **Clear math + theory**: kernels, objective, constraints, LCB; monotonicity, AUC‑consistency sketch, δ‑stability.
-3. **Improves discrimination**: optimized directly for pairwise outranking with soft acceptability and calibrated importance; uncertainty improves small‑n behavior.
-4. **Interpretability**: item‑level (F_i(t,d)), λ, (m_d), and per‑pair contributions.
-5. **Maps to matching**: LCB‑ranked lists, stable matching with a probabilistic guarantee.
-6. **Practical/anytime**: CPU‑friendly SGD; negative sampling; cached MC similarities; checkpointable
+* Replace logistic kernels by **isotonic tables** on ((\Delta,t)) per domain (4×4 table with 2‑D isotonic constraints), which preserves monotonicity non‑parametrically.
+* Add a **Bayesian hierarchical prior** over (\alpha_d,\beta_d,\gamma_d) to get credible intervals per domain and propagate uncertainty all the way to ρ‑stability.
+
+**Bottom line:** TRIMAP is a principled, triad‑aware, uncertainty‑calibrated scorer learned directly for your AUC target, with immediate drop‑in code and a stable‑matching story grounded in the COS 445 canon. It preserves interpretability, behaves well at small (n), and cleanly supports your deployment modes (monthly “Soulmates” + real‑time suggestions).

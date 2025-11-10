@@ -59,7 +59,6 @@ def directional_stats(
     num = 0.0
     den = 0.0
     vsum = 0.0
-    w2sum = 0.0
     n = 0
     for qid, m in meta.items():
         dom = str(m.get("Domain", ""))
@@ -99,12 +98,10 @@ def directional_stats(
         den += W
         num += W * p
         vsum += (W * W) * (p * (1.0 - p))
-        w2sum += (W * W)
 
     if den <= 0.0 or n == 0:
         return 0.0, 0.0, 0, 0.0
     shat = num / den
     var = vsum / (den * den) if den > 0 else 0.0
     return float(shat), float(var), int(n), float(den)
-
 

@@ -3,9 +3,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '../../../../lib/db'
 import questionsRaw from '../../../../data/questions.json'
 
+export const runtime = 'nodejs'
+
 export async function GET(req: NextRequest) {
-  const key = req.headers.get('x-admin-key') || req.nextUrl.searchParams.get('key')
-  if (key !== process.env.ADMIN_KEY) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // Require header; avoid query string to prevent leaking secrets via logs/history
+  const key = req.headers.get('x-admin-key')
+  if (!key || key !== process.env.ADMIN_KEY) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
   const items = (questionsRaw as any[]).sort((a,b) => (a.order ?? 0) - (b.order ?? 0))
   const qids = items.map(q => q.id)

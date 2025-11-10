@@ -30,4 +30,6 @@ CREATE TABLE IF NOT EXISTS responses (
 
 CREATE INDEX IF NOT EXISTS idx_responses_participant ON responses(participant_id);
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_participant_couple_fullname ON participants(couple_id, full_name);
-
+-- Case-insensitive uniqueness to prevent duplicates differing only by case/whitespace
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_participant_couple_fullname_ci
+  ON participants (couple_id, lower(trim(full_name)));

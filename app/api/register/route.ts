@@ -4,6 +4,8 @@ import { pool } from '../../../lib/db'
 import { z } from 'zod'
 import { randomUUID } from 'crypto'
 
+export const runtime = 'nodejs'
+
 const RegisterSchema = z.object({
   coupleCode: z.string().min(1),
   fullName: z.string().min(1),
@@ -19,6 +21,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid input', details: parsed.error.issues }, { status: 400 })
   }
   const { coupleCode, fullName, netId, email, monthsTogether } = parsed.data
+  const canonical = (s: string) => s.replace(/\s+/g,' ').trim()
+  const full = canonical(fullName)
 
   // Optional env allowlist: ALLOWED_COUPLE_CODES="CODE1,CODE2"
   const allowlist = (process.env.ALLOWED_COUPLE_CODES || '')
@@ -55,7 +59,7 @@ export async function POST(req: NextRequest) {
   // find existing participant by couple + full name (resume session)
   const existing = await pool.query(
     'SELECT id FROM participants WHERE couple_id=$1 AND lower(trim(full_name))=lower(trim($2)) LIMIT 1',
-    [cid, String(fullName)]
+    [cid, String(full)]
   )
   if (existing.rows.length > 0) {
     return NextResponse.json({ participantId: existing.rows[0].id })
@@ -65,7 +69,7 @@ export async function POST(req: NextRequest) {
   const participantId = randomUUID()
   await pool.query(
     'INSERT INTO participants (id, couple_id, full_name, net_id, email, started_at) VALUES ($1,$2,$3,$4,$5,NOW())',
-    [participantId, cid, String(fullName), netId ? String(netId) : null, email ?? null]
+    [participantId, cid, String(full), netId ? String(netId) : null, email ?? null]
   )
 
   return NextResponse.json({ participantId })
