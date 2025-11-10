@@ -7,14 +7,17 @@
 html, body { height: 100%; }
 body { @apply bg-white text-slate-900; }
 .container { @apply mx-auto px-4 sm:px-6; }
+.option-scroll { @apply -mx-1 px-1 overflow-x-auto flex gap-2 pb-1; }
+.option-scroll::-webkit-scrollbar { display: none; }
+.option-scroll { scrollbar-width: none; }
 
 /* light component utility styles */
 .choice { 
-  @apply border-2 rounded-lg px-3 py-2.5 text-center cursor-pointer transition-all duration-200;
+  @apply border-2 rounded-xl px-2.5 py-1.5 text-center cursor-pointer transition-all duration-200 w-full text-[13px] sm:text-[15px];
   @apply hover:border-brand-400 hover:bg-brand-50/50;
   @apply active:scale-95;
   @apply flex items-center justify-center;
-  min-height: 44px;
+  min-height: 46px;
 }
 .choice-selected { 
   @apply border-brand-600 ring-2 ring-brand-200 bg-brand-50 shadow-sm;

@@ -12,5 +12,5 @@ export const LIKERT5_IMPORTANCE = [
 ] as const;
 
 export const ACCEPTABLE_LIKERT = [
-  'Same answer', '±1 step', '±2 steps', 'Any answer'
+  'Any answer', '±2 steps', '±1 step', 'Same answer'
 ] as const;

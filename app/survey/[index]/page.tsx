@@ -214,15 +214,28 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
   function onSetSelf(val: string) {
     setSelfAnswer(val)
     if (q && q.responseType.startsWith('Likert')) {
-      if (!acceptable || acceptable.mode !== 'range') {
-        setAcceptable({ mode: 'range', tol: '±1 step' })
-      }
+      setAcceptable(prev => {
+        if (!prev) {
+          return { mode: 'range', tol: '±2 steps' }
+        }
+        if (prev.mode === 'values') {
+          return prev
+        }
+        return prev 
+      })
       try { localStorage.setItem('prevLikertSelf', val) } catch {}
     }
     setTimeout(() => maybeAutosave(), 0)
   }
   function onSetImportance(val: string) { setImportance(val); setTimeout(() => maybeAutosave(), 0) }
-  function onSetAcceptableRange(label: string) { setAcceptable({ mode: 'range', tol: label }); setTimeout(() => maybeAutosave(), 0) }
+  function onSetAcceptableRange(label: string) {
+    if (label === 'Same answer') {
+      const confirmed = window.confirm('Are you sure the ONLY acceptable partner answer is the exact same as yours?')
+      if (!confirmed) return
+    }
+    setAcceptable({ mode: 'range', tol: label })
+    setTimeout(() => maybeAutosave(), 0)
+  }
   function onToggleAcceptableOption(value: string, checked: boolean) {
     const arr = new Set([...(acceptable?.opts || [])]); checked ? arr.add(value) : arr.delete(value); setAcceptable({ mode: 'options', opts: [...arr] }); setTimeout(() => maybeAutosave(), 0)
   }
@@ -336,48 +349,60 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
                 <div className="text-sm font-semibold mb-1 text-slate-800">{COPY.triad.acceptable.title}</div>
                 <p className="text-xs text-slate-500">{COPY.triad.acceptable.help}</p>
                 <p className="text-[11px] mb-1 text-slate-500">{COPY.triad.acceptable.tip}</p>
-                {q.responseType.startsWith('Likert')}
                 {q.responseType.startsWith('Likert') ? (
-                  <div className="grid gap-3">
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
-                      {ACCEPTABLE_LIKERT.map(label => {
-                        const isSelected = acceptable?.mode === 'range' && acceptable?.tol === label
-                        return (
-                          <label key={label} className={`choice flex items-center justify-center ${isSelected ? 'choice-selected' : ''} ${isSelected ? 'scale-105' : ''} transition-transform`}>
-                            <input className="sr-only" type="radio" name="acc" value={label} onChange={() => onSetAcceptableRange(label)} />
-                            <span className="text-sm sm:text-base text-center">{label}</span>
-                          </label>
-                        )
-                      })}
-                      <label className={`choice flex items-center justify-center ${acceptable?.mode === 'values' ? 'choice-selected' : ''} ${acceptable?.mode === 'values' ? 'scale-105' : ''} transition-transform col-span-2 sm:col-span-1`}>
-                        <input className="sr-only" type="radio" name="acc" value="custom" onChange={() => setAcceptable({ mode: 'values', vals: [] })} />
-                        <span className="text-sm sm:text-base text-center">Choose specific values</span>
-                      </label>
+                  <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm">
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      <button type="button" onClick={() => onSetAcceptableRange((acceptable?.mode === 'range' ? acceptable?.tol : '±2 steps') || '±2 steps')} className={`px-4 py-1.5 rounded-full text-sm font-medium transition ${acceptable?.mode !== 'values' ? 'bg-brand-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                        Pick a range
+                      </button>
+                      <button type="button" onClick={() => {
+                        setAcceptable(prev => {
+                          if (prev?.mode === 'values') return prev
+                          const initial = prev?.vals?.length ? prev.vals : selfAnswer ? [selfAnswer] : []
+                          return { mode: 'values', vals: initial }
+                        })
+                        setTimeout(() => maybeAutosave(), 0)
+                      }} className={`px-4 py-1.5 rounded-full text-sm font-medium transition ${acceptable?.mode === 'values' ? 'bg-brand-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                        Choose specific values
+                      </button>
                     </div>
-                    {acceptable?.mode === 'values' && (
-                      <div className="mt-2 pt-3 border-t border-slate-200">
-                        <div className="text-sm font-medium text-slate-700 mb-2">Select specific values:</div>
+                    {acceptable?.mode === 'values' ? (
+                      <div>
+                        <div className="text-xs uppercase tracking-wide text-slate-500 mb-2">Tap the answers you’d accept</div>
                         <div className={`grid ${intFromType(q.responseType) === 7 ? 'grid-cols-7' : intFromType(q.responseType) === 6 ? 'grid-cols-6' : 'grid-cols-5'} gap-2 sm:gap-3`}>
                           {Array.from({ length: intFromType(q.responseType) }).map((_, i) => {
                             const val = String(i + 1)
                             const active = acceptable?.vals?.includes(val)
+                            const label = q.anchors?.[i] ?? (q.responseType === 'Likert7' ? LIKERT7[i] : q.responseType === 'Likert6' ? LIKERT6[i] : undefined)
                             return (
-                              <label key={val} className={`choice flex items-center justify-center ${active ? 'choice-selected' : ''} ${active ? 'scale-105' : ''} transition-transform`}>
-                                <input type="checkbox" className="sr-only" checked={active} onChange={e => {
-                                  const s = new Set([...(acceptable?.vals || [])])
-                                  e.target.checked ? s.add(val) : s.delete(val)
-                                  setAcceptable({ mode: 'values', vals: [...s] })
-                                  setTimeout(() => maybeAutosave(), 0)
-                                }} />
-                                <span className="font-semibold">
-                                  {val}
-                                  {(q.anchors?.[i] || (q.responseType === 'Likert7' ? LIKERT7[i] : q.responseType === 'Likert6' ? LIKERT6[i] : undefined)) && (
-                                    <span className="block text-xs text-slate-500 mt-0.5">
-                                      {q.anchors?.[i] ?? (q.responseType === 'Likert7' ? LIKERT7[i] : q.responseType === 'Likert6' ? LIKERT6[i] : '')}
-                                    </span>
-                                  )}
-                                </span>
-                              </label>
+                              <button key={val} type="button" onClick={() => {
+                                setAcceptable(prev => {
+                                  const set = new Set(prev?.vals || [])
+                                  set.has(val) ? set.delete(val) : set.add(val)
+                                  return { mode: 'values', vals: [...set] }
+                                })
+                                setTimeout(() => maybeAutosave(), 0)
+                              }} className={`choice flex flex-col items-center justify-center text-center ${active ? 'choice-selected scale-105' : ''}`}>
+                                <span className="font-semibold">{val}</span>
+                                {label && <span className="text-[11px] text-slate-500">{label}</span>}
+                              </button>
+                            )
+                          })}
+                        </div>
+                        <p className="mt-3 text-xs text-slate-500">Selected: {acceptable?.vals?.length ? acceptable.vals.join(', ') : 'none yet'}</p>
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="text-xs uppercase tracking-wide text-slate-500 mb-2">Pick a tolerance band</div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
+                          {ACCEPTABLE_LIKERT.map(label => {
+                            const isSelected = acceptable?.mode === 'range' && acceptable?.tol === label
+                            const isStrict = label === 'Same answer'
+                            const strictClasses = isStrict ? (isSelected ? 'bg-rose-50 text-rose-700 ring-2 ring-rose-300 border-rose-200' : 'border-rose-200 text-rose-600 hover:bg-rose-50') : ''
+                            return (
+                              <button key={label} type="button" onClick={() => onSetAcceptableRange(label)} className={`choice flex items-center justify-center text-center ${isSelected ? 'choice-selected scale-105' : ''} ${strictClasses}`}>
+                                {label}
+                              </button>
                             )
                           })}
                         </div>
