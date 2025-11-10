@@ -1,7 +1,14 @@
 
 'use client'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
+
+type ProgressSummary = {
+  status: 'not_started' | 'in_progress' | 'completed'
+  answered: number
+  total: number
+  resumePath: string
+}
 
 async function createOrJoin(payload: any) {
   const res = await fetch('/api/register', { method: 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)})
@@ -13,15 +20,42 @@ async function createOrJoin(payload: any) {
   return await res.json()
 }
 
+async function fetchProgressSummary(participantId: string): Promise<ProgressSummary | null> {
+  try {
+    const res = await fetch(`/api/progress?participantId=${participantId}`)
+    if (!res.ok) return null
+    return await res.json()
+  } catch {
+    return null
+  }
+}
+
 export default function Start() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<string>('')
   const [months, setMonths] = useState<number>(12)
+  const [resumeInfo, setResumeInfo] = useState<ProgressSummary | null>(null)
 
   function fullNameFrom(parts: {first?:string; middle?:string; last?:string}) {
     const mi = parts.middle ? (parts.middle.endsWith('.') ? parts.middle : `${parts.middle}.`) : ''
     return [parts.first || '', mi, parts.last || ''].filter(Boolean).join(' ').replace(/\s+/g,' ').trim()
+  }
+
+  useEffect(() => {
+    try {
+      const participantId = localStorage.getItem('participantId')
+      if (!participantId) return
+      fetchProgressSummary(participantId).then(info => {
+        if (info) setResumeInfo(info)
+      })
+    } catch {}
+  }, [])
+
+  async function goToProgress(participantId: string) {
+    const info = await fetchProgressSummary(participantId)
+    const destination = info?.resumePath || '/survey/1'
+    window.location.href = destination
   }
 
   async function onSubmit(e: any) {
@@ -39,7 +73,7 @@ export default function Start() {
       const out = await createOrJoin({ coupleCode, fullName, netId, email, monthsTogether: months || undefined })
       localStorage.setItem('participantId', out.participantId)
       setToast('Registration successful')
-      setTimeout(() => { window.location.href = '/survey/1' }, 600)
+      await goToProgress(out.participantId)
     } catch (err: any) {
       setError(err.message || 'Something went wrong')
     } finally {
@@ -55,6 +89,28 @@ export default function Start() {
           <h1 className="text-3xl font-semibold">Register for TigerMatch Study</h1>
           <p className="text-slate-600 mt-1">Both partners should use the same Couple Code.</p>
         </div>
+        {resumeInfo && (
+          <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+            <div className="text-emerald-900 font-semibold">
+              {resumeInfo.status === 'completed' ? 'You already finished this survey.' : 'Resume where you left off'}
+            </div>
+            <p className="text-emerald-800 text-sm mt-1">
+              {resumeInfo.status === 'completed'
+                ? 'Open the summary page to review next steps or share feedback.'
+                : `Progress: ${Math.round((resumeInfo.answered / Math.max(1, resumeInfo.total)) * 100)}% (${resumeInfo.answered} of ${resumeInfo.total} items).`}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-3">
+              <button onClick={() => window.location.href = resumeInfo.resumePath}
+                className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700">
+                {resumeInfo.status === 'completed' ? 'View completion page' : 'Jump back in'}
+              </button>
+              <button onClick={() => { localStorage.removeItem('participantId'); setResumeInfo(null) }}
+                className="text-sm font-medium text-emerald-900 underline-offset-2 hover:underline">
+                Not you? Clear saved session
+              </button>
+            </div>
+          </div>
+        )}
         <form onSubmit={onSubmit} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-md grid gap-4">
           <div>
             <label className="block text-sm font-medium">Couple Code *</label>

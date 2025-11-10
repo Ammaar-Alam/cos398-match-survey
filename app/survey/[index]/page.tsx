@@ -49,8 +49,34 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
   const [acceptable, setAcceptable] = useState<any>(null)
   const [saving, setSaving] = useState(false)
   const [tStart, setTStart] = useState<number>(0)
+  const [participantId, setParticipantId] = useState<string | null>(null)
 
   useEffect(() => { fetchQuestions().then(setQuestions) }, [])
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('participantId')
+      if (!stored) {
+        router.replace('/start')
+        return
+      }
+      setParticipantId(stored)
+    } catch {
+      router.replace('/start')
+    }
+  }, [router])
+
+  useEffect(() => {
+    if (!participantId) return
+    fetch(`/api/progress?participantId=${participantId}`)
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data?.status === 'completed') {
+          router.replace('/done')
+        }
+      })
+      .catch(() => {})
+  }, [participantId, router])
   useEffect(() => {
     if (questions.length > 0) {
       const qq = questions[idx0]
@@ -65,9 +91,8 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
 
   useEffect(() => {
     async function loadSaved() {
-      if (!q) return
+      if (!q || !participantId) return
       try {
-        const participantId = localStorage.getItem('participantId')
         const res = await fetch(`/api/response?participantId=${participantId}&questionId=${q.id}`)
         if (!res.ok) {
           return
@@ -89,7 +114,7 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
       } catch {}
     }
     loadSaved()
-  }, [q])
+  }, [q, participantId])
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -100,7 +125,7 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
     return () => document.removeEventListener('keydown', onKey)
   }, [q, selfAnswer, importance, acceptable])
 
-  if (!q) return <div className="container py-12">Loading…</div>
+  if (!q || !participantId) return <div className="container py-12">Loading…</div>
 
   const total = questions.length || 50
   const progress = Math.round(((idx0 + 1) / total) * 100)
@@ -158,7 +183,10 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
   async function goNext() {
     if (!hasSelf() || !importance || !acceptable) return
     if (!q) return
-    const participantId = localStorage.getItem('participantId')
+    if (!participantId) {
+      router.replace('/start')
+      return
+    }
     const isLast = idx0 + 1 >= questions.length
     const payload = { participantId, questionId: q.id, selfAnswer: currentSelfPayload(), importance: parseImportance(importance), acceptable: JSON.stringify(withMeta(acceptable)), final: isLast }
     if (isLast) {
@@ -170,8 +198,7 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
   }
   async function goPrev() {
     if (idx0 === 0) return
-    if (hasSelf() && importance && acceptable && q) {
-      const participantId = localStorage.getItem('participantId')
+    if (hasSelf() && importance && acceptable && q && participantId) {
       fireAndForgetSave({ participantId, questionId: q.id, selfAnswer: currentSelfPayload(), importance: parseImportance(importance), acceptable: JSON.stringify(withMeta(acceptable)), final: false })
     }
     router.push(`/survey/${idx0}`)
@@ -185,8 +212,9 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
     try {
       if (!q) return
       if (!hasSelf() || !importance || !acceptable) return
-      const participantId = localStorage.getItem('participantId')
-      fireAndForgetSave({ participantId, questionId: q.id, selfAnswer: currentSelfPayload(), importance: parseImportance(importance), acceptable: JSON.stringify(withMeta(acceptable)), final: false })
+      if (participantId) {
+        fireAndForgetSave({ participantId, questionId: q.id, selfAnswer: currentSelfPayload(), importance: parseImportance(importance), acceptable: JSON.stringify(withMeta(acceptable)), final: false })
+      }
     } catch {}
   }
   function onSetSelf(val: string) {
