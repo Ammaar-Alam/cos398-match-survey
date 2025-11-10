@@ -7,20 +7,20 @@ import type { ReactNode } from 'react'
 
 export default function MethodsPage(){
   return (
-    <div className="container py-12">
-      <motion.div initial={{opacity:0, y:8}} animate={{opacity:1, y:0}} transition={{duration:0.35}} className="max-w-5xl mx-auto">
+    <div className="container py-10 sm:py-12">
+      <motion.div initial={{opacity:0, y:8}} animate={{opacity:1, y:0}} transition={{duration:0.35}} className="mx-auto flex w-full max-w-5xl flex-col gap-8">
         {/* hero */}
-        <div className="mb-10">
-          <div className="inline-flex items-center gap-2 text-xs font-medium text-slate-600 bg-gradient-to-r from-slate-50 to-slate-100 px-3 py-1.5 rounded-full border border-slate-200/50">Overview</div>
-          <h1 className="mt-4 text-4xl font-bold tracking-tight text-slate-900">Methods & Math</h1>
-          <p className="text-slate-600 mt-2 text-lg leading-relaxed">A precise specification of the baseline scorer, evaluation protocol, and the interpretable ML refinement used in this study.</p>
+        <div>
+          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200/50 bg-gradient-to-r from-slate-50 to-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600">Overview</div>
+          <h1 className="mt-4 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">Methods & Math</h1>
+          <p className="mt-2 text-base leading-relaxed text-slate-600 sm:text-lg">A precise specification of the baseline scorer, evaluation protocol, and the interpretable ML refinement used in this study.</p>
         </div>
 
         {/* three cards */}
-        <div className="grid gap-5 sm:grid-cols-3 mb-10">
-          <MethodCard title="Baseline scorer" desc="Directed acceptability with importance, per‑domain multipliers, user‑priority boosts; geometric mutuality; finite‑sample penalty c/√n; min‑overlap gate."/>
-          <MethodCard title="Evaluation" desc="True partners vs sampled non‑partners; AUC via Mann–Whitney U (with tie handling), lift, and a median‑rank proxy."/>
-          <MethodCard title="ML refinement" desc="5‑fold stratified CV, L2‑regularized logistic regression on per‑domain mutualities; coefficients → positive, normalized domain multipliers."/>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <MethodCard title="Baseline scorer" desc="Directed acceptability with importance, per-domain multipliers, user-priority boosts; geometric mutuality; finite-sample penalty c/√n; min-overlap gate."/>
+          <MethodCard title="Evaluation" desc="True partners vs sampled non-partners; AUC via Mann–Whitney U (with tie handling), lift, and a median-rank proxy."/>
+          <MethodCard title="ML refinement" desc="5-fold stratified CV, L2-regularized logistic regression on per-domain mutualities; coefficients → positive, normalized domain multipliers."/>
         </div>
 
         {/* Notation & encoding */}
@@ -201,18 +201,18 @@ export default function MethodsPage(){
         </Section>
 
         {/* Pipeline steps */}
-        <div className="bg-gradient-to-br from-slate-50 to-slate-100/50 border border-slate-200 rounded-2xl p-8 mb-10 shadow-sm">
-          <h2 className="text-xl font-bold mb-5 text-slate-900">Pipeline (end‑to‑end)</h2>
+        <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-slate-100/50 p-5 shadow-sm sm:p-8">
+          <h2 className="mb-4 text-lg font-bold text-slate-900 sm:text-xl">Pipeline (end-to-end)</h2>
           <ol className="space-y-3">
-            <Step n={1} text="Invitation‑only: each partner completes a 50‑item questionnaire independently (TIPI, PVQ‑21, Social, Communication/Friendship, Lifestyle, Priorities/Deal‑breakers)." />
-            <Step n={2} text="Baseline scorer computes FinalMatch for true partners and sampled non‑partners; we evaluate AUC, lift, and a median‑rank proxy." />
-            <Step n={3} text="Interpretable ML learns domain multipliers via 5‑fold CV; we re‑evaluate and report the change in AUC/lift." />
+            <Step n={1} text="Invitation-only: each partner completes a 50-item questionnaire independently (TIPI, PVQ-21, Social, Communication/Friendship, Lifestyle, Priorities/Deal-breakers)." />
+            <Step n={2} text="Baseline scorer computes FinalMatch for true partners and sampled non-partners; we evaluate AUC, lift, and a median-rank proxy." />
+            <Step n={3} text="Interpretable ML learns domain multipliers via 5-fold CV; we re-evaluate and report the change in AUC/lift." />
           </ol>
         </div>
 
         {/* References */}
         <Section title="References (instruments, methodology, mechanisms, software)">
-          <ol className="text-slate-700 space-y-2 list-decimal pl-6">
+          <ol className="list-decimal space-y-2 pl-5 text-sm text-slate-700 sm:text-base">
             <li><strong>TIPI (Ten‑Item Personality Inventory).</strong> Gosling, S. D., Rentfrow, P. J., & Swann, W. B. (2003). <em>A very brief measure of the Big‑Five personality domains</em>. <span className="italic">Journal of Research in Personality</span>, 37(6), 504–528.</li>
             <li><strong>Schwartz values / PVQ‑21.</strong> Schwartz, S. H. (2012). <em>An overview of the Schwartz theory of basic values</em>. <span className="italic">Online Readings in Psychology and Culture</span>, 2(1). (PVQ‑21 used by the European Social Survey.)</li>
             <li><strong>AUC and Mann–Whitney U.</strong> Mann, H. B., & Whitney, D. R. (1947). <em>On a test of whether one of two random variables is stochastically larger than the other</em>. <span className="italic">Annals of Mathematical Statistics</span>, 18(1), 50–60.</li>
@@ -223,15 +223,15 @@ export default function MethodsPage(){
             <li><strong>Software (scikit‑learn).</strong> Pedregosa, F., et&nbsp;al. (2011). <em>Scikit‑learn: Machine learning in Python</em>. <span className="italic">Journal of Machine Learning Research</span>, 12, 2825–2830.</li>
             <li><strong>Software (LIBLINEAR).</strong> Fan, R.‑E., Chang, K.‑W., Hsieh, C.‑J., Wang, X.‑R., & Lin, C.‑J. (2008). <em>LIBLINEAR: A library for large linear classification</em>. <span className="italic">JMLR</span>, 9, 1871–1874.</li>
           </ol>
-          <p className="text-slate-500 text-sm mt-3">
+          <p className="mt-3 text-sm text-slate-500">
             Notes: PVQ‑21 portrait wording is attributed to the ESS instrument; our app exposes official text when provided. We cite scikit‑learn and LIBLINEAR corresponding to the code paths used in <code>tiger-alg/ml/learn_domain_weights.py</code>.
           </p>
         </Section>
 
         {/* footer ctas */}
-        <div className="mt-8 flex items-center gap-3">
-          <Link href="/" className="px-5 py-2.5 rounded-md border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors font-medium">Back</Link>
-          <Link href="/start" className="px-6 py-2.5 rounded-md bg-brand-600 text-white hover:bg-brand-700 transition-colors font-medium shadow-sm">Begin Questionnaire</Link>
+        <div className="mt-4 flex flex-col-reverse gap-3 sm:mt-2 sm:flex-row sm:items-center">
+          <Link href="/" className="w-full rounded-md border border-slate-300 px-5 py-2.5 text-center font-medium text-slate-700 transition-colors hover:bg-slate-50 sm:w-auto">Back</Link>
+          <Link href="/start" className="w-full rounded-md bg-brand-600 px-6 py-2.5 text-center font-medium text-white shadow-sm transition-colors hover:bg-brand-700 sm:w-auto">Begin Questionnaire</Link>
         </div>
       </motion.div>
     </div>
@@ -240,27 +240,29 @@ export default function MethodsPage(){
 
 function Section({ title, children }: { title:string, children:ReactNode }){
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow mb-8">
-      <h2 className="text-lg font-bold mb-3 text-slate-900">{title}</h2>
-      <div className="prose prose-slate max-w-none">{children}</div>
-    </div>
+    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md sm:p-6">
+      <h2 className="text-base font-bold text-slate-900 sm:text-lg">{title}</h2>
+      <div className="mt-3 space-y-3 text-sm leading-relaxed text-slate-700 sm:text-base">
+        {children}
+      </div>
+    </section>
   )
 }
 
 function MethodCard({ title, desc }: { title:string, desc:string }){
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-md transition-all duration-200 hover:border-slate-300">
-      <div className="text-base font-bold text-slate-900 mb-2">{title}</div>
-      <div className="text-slate-600 text-sm leading-relaxed">{desc}</div>
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all duration-200 hover:border-slate-300 hover:shadow-md sm:p-5">
+      <div className="text-base font-bold text-slate-900">{title}</div>
+      <div className="mt-1 text-sm leading-relaxed text-slate-600 sm:text-[15px]">{desc}</div>
     </div>
   )
 }
 
 function Step({ n, text }: { n:number, text:string }){
   return (
-    <li className="flex items-start gap-4">
-      <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-brand-600 text-white text-sm font-bold mt-0.5 shadow-sm flex-shrink-0">{n}</span>
-      <span className="text-slate-700 leading-relaxed pt-0.5">{text}</span>
+    <li className="flex gap-3 rounded-xl border border-white/0 bg-white/70 p-4 shadow-sm ring-1 ring-slate-200/70">
+      <span className="mt-0.5 inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-brand-600 text-sm font-bold text-white shadow-sm">{n}</span>
+      <span className="text-sm leading-relaxed text-slate-700 sm:text-base">{text}</span>
     </li>
   )
 }
