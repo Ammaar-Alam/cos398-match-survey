@@ -1,245 +1,384 @@
-## Why a custom web app (vs. Qualtrics) for this use‑case
+# TigerMatch‑PAM v2.0
 
-**Pros of custom app**
+**A Triad‑Aware Monotone Probabilistic Acceptability Model with AUC‑consistent pairwise training and δ‑stable matching**
 
-* **All three sub‑responses per item on one screen** (self answer + acceptable partner answers + importance), with **arrow‑key navigation** and **micro‑animations** to cut friction and fatigue.
-* **Exact data schema** that mirrors your research needs: export wide CSV with columns `SELF_Q*`, `ACC_Q*`, `IMP_Q*` so you can “drop in” algorithms offline with zero munging.
-* **Precise control over defaults** (e.g., Likert acceptable range defaults to ±1 step; importance defaults to “A little (1)”) and instrumentation (time per item, completion).
-* Easier to **version and reproduce** for publication.
+## Executive summary (what’s new)
 
-**Cons / trade‑offs**
-
-* You own **security & ops** (but for 60 participants total, this is manageable).
-* Must ensure **IRB‑grade consent & privacy** (straightforward: static consent page + secure Postgres + limited access).
-* Qualtrics has “no code” convenience and built‑in audit logs; but its UI makes the OkCupid‑style triad clunky.
-
-Given your target (n=60 individuals now, larger pilot later) and the desire to **minimize fatigue** and **export exactly what your offline pipeline expects**, the **custom app is the better fit**. For the *matching research background and fairness properties we’ll leverage in later phases* (stable matching, randomized mechanisms), see COS 445 lecture notes for context.  
+* **Triad‑aware likelihood**: For each direction (A→B), every item contributes a **probability of passing A’s stated filter**, not a hard 0/1.
+  – **Likert**: a **2‑D monotone kernel** (F_i(t,d)\in[0,1]) that is **(i)** non‑decreasing in declared tolerance (t) and **(ii)** non‑increasing in self–partner distance (d=|x^A_i-x^B_i|), learned from couples via a constrained parametric family.
+  – **MC**: a **soft‑acceptance kernel** based on a **population‑estimated option similarity** (s_i(o,o')) so near‑miss answers can still partly pass a filter.
+* **Importance calibration**: Learn a **monotone map** (\lambda(\text{cat})) from ({0,1,10,50,250}) to (\mathbb R_{\ge 0}) instead of treating the categories as fixed linear weights; also **learn domain multipliers** and the **Top‑3 boost**.
+* **Uncertainty‑aware scoring**: Compute **directional satisfaction posteriors** and aggregate with a strictly increasing function (H\big(\cdot,\cdot\big)). Use a **closed‑form lower‑confidence bound (LCB)** with a Kish effective‑sample‑size correction in lieu of an ad‑hoc (c/\sqrt n) penalty.
+* **AUC‑consistent training**: Optimize a **pairwise logistic ranking loss** over **true‑vs‑decoy** comparisons built from your couples protocol; the loss is a standard AUC‑consistent surrogate.
+* **δ‑stable matching**: Produce ranked lists from **LCB scores** and run Stable Marriage (or Stable Roommates) on **incomplete lists with ties**. We prove the resulting matching is **δ‑stable** in the sense that ex‑post blocking pairs occur with probability ≤ δ under the model’s uncertainty.
 
 ---
 
-# Context for the outside implementer (what this app is and isn’t)
+## 1) Formal setup
 
-* **What this app does:** Shows **one question per page**. Each page collects three things:
+Let items (i=1,\dots,50). For user (A):
 
-  1. **Your answer** (SELF)
-  2. **Acceptable partner answers** (ACC)
-  3. **Importance** (IMP) on a 5‑level scale (0,1,10,50,250)
+* **Self**: (x_i^A) (Likert integer or MC option(s))
+* **Acceptable**: (T_i^A) (Likert tolerance category (\in{0,1,2,3}) mapping Same→0, ±1→1, ±2→2, Any→3) or an acceptable set (S_i^A\subseteq \Omega_i) (MC)
+* **Importance**: category (c_i^A\in{0,1,10,50,250})
+* **Domain**: (d(i)\in\mathcal D={\text{Values, Communication, Lifestyle, Social, Personality, Friendship}})
+* **Top‑3 domains**: (\mathcal P_A\subset\mathcal D)
 
-* **What this app does *not* do:** It **does not compute any match**. We will run algorithms offline later against the exported CSV to evaluate accuracy on couples who have been together for ≥ 12 months.
+### 1.1 Likert acceptability kernel (A→B)
 
-* **Participants:** Couples supply **Couple Code + Full Name + Princeton NetID** (no login). Each partner independently completes the same 50 items.
+Define distance (d_i(A,B)=\min(|x_i^A-x_i^B|,3)\in{0,1,2,3}) and tolerance (t_i^A\in{0,1,2,3}).
+We model the **pass probability**:
+[
+p_i^A(B)\equiv \Pr[\text{A accepts B on }i \mid x_i^A,x_i^B,T_i^A]
+= \sigma!\left(\alpha_i + \sum_{c=1}^{3} a_{i,c},\mathbf 1[d_i\ge c] + \sum_{r=1}^{3} b_{i,r},\mathbf 1[t_i^A\ge r]\right),
+]
+with (\sigma(u)=1/(1+e^{-u})). **Monotone constraints**:
+[
+a_{i,c}\le 0\quad(\text{non‑increasing in distance}),\qquad
+b_{i,r}\ge 0\quad(\text{non‑decreasing in tolerance}).
+]
+This “cumulative step” parameterization is convex‑friendly and yields a **piecewise‑constant, shape‑constrained** 2‑D surface (F_i(t,d)).
 
-* **Export:** Admin can download a **wide CSV** with columns:
+### 1.2 MC acceptability kernel (A→B)
 
-  ```
-  participantId,coupleCode,fullName,netId,
-  SELF_Q1..SELF_Q50, ACC_Q1..ACC_Q50, IMP_Q1..IMP_Q50
-  ```
+Let (S_i^A\subseteq \Omega_i) be A’s accepted options (default to A’s own selection(s) if blank). Build a **population similarity** for each item (i):
+[
+s_i(o,o')\in[0,1],\quad s_i(o,o)=1,\quad s_i(o,o')=s_i(o',o),
+]
+estimated once from the survey’s **Acceptable** sets using normalized co‑acceptance (e.g., Jaccard/PMI; we keep (s_i) fixed during training for stability and interpretability).
+
+Define soft proximity of B’s answer (y) to A’s acceptable set:
+[
+\mathrm{sim}*i^A(y) ;=; \max*{o\in S_i^A} s_i(y,o).\tag{MC‑proximity}
+]
+Then
+[
+p_i^A(B)=\sigma!\big(\alpha_i^{\text{MC}}+\eta_i,\mathrm{sim}_i^A(x_i^B)\big),\quad \eta_i\ge 0
+]
+(enforces monotonicity in “how close B is to A’s accepted set”). If (S_i^A=\emptyset) (rare), default (S_i^A={x_i^A}).
+
+### 1.3 Importance calibration & domain weights
+
+Learn a **non‑decreasing map** (\lambda:{0,1,10,50,250}\to\mathbb R_{\ge0}) with (\lambda(0)=0) via 1‑D isotonic regression or a constrained reparametrization (cumulative positive steps).
+Learn domain weights (m_d>0) and a global Top‑3 multiplier (\psi\ge 1).
+
+The **directional item weight**:
+[
+W_i^A ;=; \lambda(c_i^A)\cdot m_{d(i)}\cdot \big(\psi\ \text{if } d(i)\in\mathcal P_A \text{ else }1\big).
+]
+
+### 1.4 Directional satisfaction, uncertainty, and pair score
+
+For overlap items (\mathcal I_{AB}) with (W_i^A>0), define (weighted) mean pass probability
+[
+\hat s_A(B) = \frac{\sum_{i\in\mathcal I_{AB}} W_i^A, p_i^A(B)}{\sum_{i\in\mathcal I_{AB}} W_i^A}.
+]
+Approximate (conditional) variance under independence:
+[
+\widehat{\mathrm{Var}}\big[\hat s_A(B)\big] ;\approx;
+\frac{\sum_i (W_i^A)^2,p_i^A(B)\big(1-p_i^A(B)\big)}{\Big(\sum_i W_i^A\Big)^2}.
+]
+Define **Kish effective sample size**
+[
+n_{\mathrm{eff}}^A(B)=\frac{\Big(\sum_i W_i^A\Big)^2}{\sum_i (W_i^A)^2}.
+]
+For confidence level (1-\delta), let (z_\delta) be the normal quantile and set the **LCB**:
+[
+\underline s_A^\delta(B)=\max!\left{0,;\hat s_A(B) - z_\delta\sqrt{\widehat{\mathrm{Var}}[\hat s_A(B)]}\right}.
+]
+Aggregate the two directions with a strictly increasing map on ([0,1]^2). We use **additive logits** for convexity and interpretability:
+[
+\mathrm{Score}*\delta(A,B) ;=; \underbrace{\operatorname{logit}\big(\underline s_A^\delta(B)\big)}*{\in\mathbb R} + \underbrace{\operatorname{logit}\big(\underline s_B^\delta(A)\big)}_{\in\mathbb R}.
+]
+This replaces the baseline’s geometric mean and heuristic (c/\sqrt n) with a **probabilistic, variance‑aware** shrinkage.
 
 ---
 
-# System architecture (chosen stack)
+## 2) Learning objective (AUC‑consistent pairwise ranking)
 
-* **Frontend:** React (Next.js 14 App Router), **TailwindCSS**, **Framer Motion** for animations
-* **Backend:** Next.js API routes (**Node.js/TypeScript**)
-* **DB:** **PostgreSQL** with **node-postgres (pg)**
-* **Auth:** None (by design). Entry screen collects **Couple Code + NetID + Name** and issues a `participantId` stored locally for the session.
-* **Hosting:** Vercel (frontend + API) + Neon/Supabase (managed Postgres) in production; Dockerized Postgres for local dev.
+Your evaluation cares about **“partner outranks decoys”**. Train parameters
+(\Theta={\alpha_i,a_{i,\cdot},b_{i,\cdot},\alpha_i^{\mathrm{MC}},\eta_i, \lambda(\cdot), m_d,\psi})
+by minimizing the **pairwise logistic loss** over triples ((A,P,D)) (true partner (P) and a sampled non‑partner (D)):
+
+[
+\mathcal L(\Theta)=\sum_{A}\sum_{D\sim\mathcal N(A)}
+\log\Big(1+\exp\big(-[\mathrm{Score}*\delta(A,P)-\mathrm{Score}*\delta(A,D)]\big)\Big)
+;+; \mathcal R(\Theta).
+]
+
+(\mathcal R) contains: (i) (\ell_2) on free parameters; (ii) small quadratic priors anchoring (m_d) and (\psi) near the baseline multipliers; (iii) barrier terms to enforce the monotone sign constraints (e.g., parameterize (a_{i,c}=-\text{softplus}(\tilde a_{i,c})), (b_{i,r}=+\text{softplus}(\tilde b_{i,r})), (\eta_i=\text{softplus}(\tilde \eta_i)), steps for (\lambda) with softplus).
+
+**Consistency (sketch).** The pairwise logistic is a standard AUC surrogate: if the scoring class contains the Bayes‑optimal difference function and the loss is proper/strictly convex in score differences, minimizers are **AUC‑consistent** (risk convergence implies AUC convergence). Our score is strictly increasing in each directional LCB; as sample size grows, LCB→truth and the function class induced by the monotone kernels can represent any antitone/isotone step surface on ({0,1,2,3}^2), hence contains the Bayes score on this discretization. (Full proof can go in the paper.)
 
 ---
 
-# Directory structure
+## 3) Theoretical properties (high‑level)
+
+**P1. Monotonicity** (exact).
+By construction (F_i(t,d)) is non‑decreasing in (t) and non‑increasing in (d); (\lambda) is non‑decreasing; therefore, for fixed (B), **raising A’s tolerance/importance never decreases** (\hat s_A(B)).
+
+**P2. Confidence‑aware shrinkage** (finite‑sample).
+Under item‑wise conditional independence, (\underline s_A^\delta(B)) is a valid one‑sided normal LCB:
+(\Pr[s_A(B)\ge \underline s_A^\delta(B)]\gtrsim 1-\delta). Aggregating through (\operatorname{logit}(\cdot)), which is increasing, preserves coverage.
+
+**P3. AUC‑consistency** (asymptotic).
+Given i.i.d. couples and non‑partners sampled as in your protocol, the pairwise logistic on score differences is **Fisher consistent** for maximizing the probability that the true pair outranks a random non‑partner. (We will include a formal statement and references in the methods PDF.)
+
+**P4. δ‑stability of the matching** (probabilistic).
+Let (\pi) be a matching produced by running Stable Marriage/Roommates on rankings **induced by (\mathrm{Score}_\delta)**. Then, with probability at least (1-2\delta) (union bound across two directions), no pair ((u,v)) forms a blocking pair under the unshrunk latent satisfactions, because any blocking would require both (u) and (v) to prefer each other **above their LCB‑ranked partners**, contradicting the LCB coverage. (We provide a precise lemma in the PDF.)
+
+---
+
+## 4) Mapping to matching and incentives
+
+### 4.1 From scores to ranked lists
+
+For each person (A), define a **directed** preference score to each candidate (B):
+[
+R_A(B)=\operatorname{logit}\big(\underline s_A^\delta(B)\big).
+]
+Create **incomplete lists** by removing any (B) for which either
+(i) (\underline s_A^\delta(B)) falls below a deployment threshold (\tau) (e.g., 0.2), or
+(ii) any “Mandatory” item has (\Pr[\text{pass}]) below a hard cap (e.g., (<0.1)).
+Break ties by tiny deterministic jitter on (R_A(B)) for algorithmic convenience.
+
+### 4.2 Stable matching with uncertainty
+
+* **Bipartite cohorts**: run **Gale‑Shapley** on the incomplete lists.
+* **Non‑bipartite cohorts**: run **Stable Roommates with Ties and Incomplete lists (SRTI)** (Irving + tie handling).
+
+**Guarantee (sketch)**: Using LCB‑based rankings yields a matching that is **δ‑stable** in the probabilistic sense above. This provides a principled replacement for the baseline’s overlap penalty during deployment.
+
+### 4.3 Incentives
+
+* **Importance**: Since (\hat s_A(B)) is increasing in (\lambda(c)) and we optimize a symmetric mutual score, unilateral inflation of importance can distort others’ preferences toward/away from (A). The mechanism is **not strategy‑proof** (as with classic stable matching), but the **Top‑3 boost (\psi)** is learned globally and monotone, keeping reporting incentives transparent. We document this in the paper.
+* **Tolerance**: raising tolerance weakly raises (A)’s outgoing rankings, which **cannot hurt** A in Gale‑Shapley if A is a proposer; if A is a receiver, effects are ambiguous (standard).
+
+---
+
+## 5) Implementation plan (drop‑in)
 
 ```
-tigermatch-couples-survey/
-├─ app/
-│  ├─ page.tsx                  # Intro/landing
-│  ├─ privacy/page.tsx          # Privacy page
-│  ├─ start/page.tsx            # “Register” (Couple Code, Name, NetID)
-│  ├─ survey/[index]/page.tsx   # One-question-per-page (triad UI)
-│  ├─ done/page.tsx             # Thank you
-│  └─ api/
-│     ├─ register/route.ts      # POST create/join couple & participant
-│     ├─ questions/route.ts     # GET list of items
-│     ├─ response/route.ts      # POST upsert one response
-│     └─ admin/export/route.ts  # GET CSV export (admin key)
-├─ components/                  # (Optional future: shared UI components)
-├─ data/
-│  └─ questions.json            # 50 items with response types & options
-├─ lib/
-│  └─ db.ts                     # pg pool client
-├─ scripts/
-│  └─ db-init.ts                # Create tables (Postgres SQL via node-postgres)
-├─ scripts/
-│  ├─ seed.ts                   # Seed DB with 50 items
-│  └─ export.ts                 # CLI export (same shape as API export)
-├─ public/                      # Static assets
-├─ README.md                    # This playbook + setup
-├─ package.json
-├─ tailwind.config.ts
-├─ postcss.config.js
-├─ tsconfig.json
-└─ .env.example
+tiger-alg/
+  models/
+    accept_kernels.py        # Likert & MC kernels with monotone parameterizations
+    importance_map.py        # λ: isotonic or positive cumulative steps
+    domain_weights.py        # m_d and ψ with priors/regularizers
+    mc_similarity.py         # build s_i(o,o') from Acceptable sets in export.csv
+  train/
+    data.py                  # loaders from export.csv / couples.csv / meta.json
+    pair_sampler.py          # true-vs-decoy triples per A with N decoys
+    loss.py                  # pairwise logistic on Scoreδ differences
+    trainer.py               # SGD/Adam, early stopping on val AUC
+  scoring/
+    directional.py           # compute p_i^A(B), ŝ, Var, n_eff, LCB
+    pair_score.py            # Scoreδ(A,B) = logit(LCB_A) + logit(LCB_B)
+    score_pairs_cli.py       # emits scores.csv (A,B,score,overlap,neffA,neffB,...)
+  eval/
+    evaluate_pam.py          # mirrors baseline metrics + CIs + permutation null
+    plots.py                 # interp visuals (distance–tolerance surfaces, λ, m_d)
+  matching/
+    rankings.py              # build incomplete lists from LCBs + thresholds
+    stable.py                # Gale-Shapley & SRTI (ties, incompletes)
+    deploy_note.md           # δ-stability statement and knobs
+  README.md
 ```
 
----
+### 5.1 CLI contract
 
-## Data model (PostgreSQL)
-
-We use plain SQL tables managed by a small init script. Questions/options are served from `data/questions.json` and are not stored in DB.
-
-Tables:
-- couples(id UUID PK, code TEXT UNIQUE, months_together INT, created_at TIMESTAMPTZ)
-- participants(id UUID PK, couple_id UUID FK couples(id), full_name TEXT, net_id TEXT, email TEXT, started_at TIMESTAMPTZ, completed_at TIMESTAMPTZ)
-- responses(id UUID PK, participant_id UUID FK participants(id), question_id TEXT, self_answer TEXT, acceptable TEXT, importance INT, created_at TIMESTAMPTZ, updated_at TIMESTAMPTZ, UNIQUE(participant_id, question_id))
-
----
-
-# Frontend flows & UX details
-
-* **Landing (`/`)**: short study explainer, CTA, links to Privacy. Smooth **fade‑in** and motion from Framer Motion.
-
-* **Start (`/start`)**: form for **Couple Code + Full Name + NetID (+ optional email, months together)** → `POST /api/register` → stores `participantId` in `localStorage` → redirects to `/survey/1`.
-
-* **Survey (`/survey/[index]`)**:
-
-  * **One item per page** with a **progress indicator** (e.g., 1/50 = 2%).
-  * **Your answer** section:
-
-    * **Likert:** 7, 6, or 5 labeled buttons (numbers shown; keep anchors in the paper/consent).
-    * **MC single/multi:** selectable cards for each option.
-  * **Acceptable partner answers**:
-
-    * **Likert:** `Same`, `±1`, `±2`, `Any`.
-    * **MC:** multi‑select of the item’s options.
-  * **Importance**: `Irrelevant (0)`, `A little (1)`, `Somewhat (10)`, `Very (50)`, `Mandatory (250)`.
-  * **Keyboard navigation**: `←` back, `→` next (blocked until SELF selected).
-  * **Auto‑save**: every Next/Back posts to `/api/response` (idempotent upsert).
-  * **Animations**: subtle slide in/out on question transitions.
-
-* **Done (`/done`)**: confirmation; instruct partner to use the same **Couple Code**.
-
----
-
-# API contracts (simple JSON)
-
-* **POST `/api/register`**
-  Request:
-
-  ```json
-  { "coupleCode": "TIGER-1234", "fullName": "A. Student", "netId": "as1234", "email": "", "monthsTogether": 18 }
-  ```
-
-  Response:
-
-  ```json
-  { "participantId": "cuid..." }
-  ```
-
-* **GET `/api/questions`**
-  Response:
-
-  ```json
-  [
-    { "id":"Q1","text":"I see myself as extraverted, enthusiastic.","responseType":"Likert7","options":[] },
-    { "id":"Q32","text":"Your ideal weekend evening is usually:","responseType":"MC_SINGLE","options":[{"label":"Quiet with 1–2 close friends","value":"1"}, ...] }
-    ...
-  ]
-  ```
-
-* **POST `/api/response`**
-  Request:
-
-  ```json
-  {
-    "participantId":"cuid...",
-    "questionId":"Q34",
-    "selfAnswer":"3",
-    "acceptable":"{\"mode\":\"range\",\"tol\":\"±1 step\"}",
-    "importance":10
-  }
-  ```
-
-  Response: `{ "ok": true }`
-
-* **GET `/api/admin/export?key=ADMIN_KEY`**
-  Returns `text/csv` attachment of wide table:
+* **Train**
 
   ```
-  participantId,coupleCode,fullName,netId,SELF_Q1,...,ACC_Q1,...,IMP_Q1,...
+  python -m train.trainer \
+    --export_csv ../export.csv \
+    --couples_csv ../couples.csv \
+    --meta_json meta.json \
+    --outdir out_pam \
+    --negatives 20 --delta 0.10 --seed 1
   ```
 
----
+* **Score**
 
-# The 50 items (seeded)
+  ```
+  python -m scoring.score_pairs_cli \
+    --export_csv ../export.csv \
+    --meta_json meta.json \
+    --model out_pam/model.pt \
+    --delta 0.10 \
+    --out scores.csv
+  ```
 
-* **TIPI (10)** — 7‑point
-* **PVQ‑21 (21)** — 6‑point *(paraphrased here; swap in ESS official wording before publishing)*
-* **Social (4)**, **Communication/Friendship (5)**, **Lifestyle (6)**, **Priorities/Deal‑breakers (4)**
+* **Evaluate**
 
-All 50 are already in `data/questions.json` and seeded into the DB via `npm run seed`.
-*(We preserved your structure and triad per item; this is the same content you approved for QSF, adapted to our UI.)*
+  ```
+  python -m eval.evaluate_pam \
+    --scores_csv scores.csv \
+    --couples_csv ../couples.csv \
+    --out summary.csv
+  ```
 
----
+* **Match** (optional for cohort deployments)
 
-# Security & privacy notes
+  ```
+  python -m matching.rankings \
+    --scores_csv scores.csv --delta 0.10 --tau 0.20 --out lists.json
+  python -m matching.stable --lists lists.json --mode bipartite --out matching.json
+  ```
 
-* No formal login; minimal identifiers (NetID, name).
-* Use **managed Postgres with TLS** (Neon/Supabase). Store backups encrypted.
-* Protect `/api/admin/export` with a strong `ADMIN_KEY` (rotate per study).
-* Keep raw data accessible only to PI + named RAs; document in IRB.
+### 5.2 Core pseudocode (training loop)
 
----
+```python
+# build MC similarities once
+S = build_mc_similarity(export_csv, meta_json)  # dict[item_id] -> |Ω_i|x|Ω_i| matrix in [0,1]
 
-# How to run locally
+# prepare triples (A, partner(A), D)
+triples = sample_true_vs_decoys(couples_csv, export_csv, N=negatives)
 
-```bash
-# 1) Configure environment
-cp .env.example .env
-# Set DATABASE_URL (Postgres) and ADMIN_KEY
+# initialize monotone-constrained params (reparam via softplus to enforce signs)
+Θ = init_params(meta_json, warm_start_from_baseline=True)
 
-# 2) Database
-npm install
-npx prisma generate
+for epoch in range(E):
+    for batch in minibatch(triples, B):
+        # forward: Scoreδ(A,P) - Scoreδ(A,D)
+        diff = []
+        for (A,P,D) in batch:
+            sA_P, vA_P = directional_stats(A,P, Θ, S)   # ŝ and Var (Likert + MC kernels)
+            sP_A, vP_A = directional_stats(P,A, Θ, S)
+            sA_D, vA_D = directional_stats(A,D, Θ, S)
+            sD_A, vD_A = directional_stats(D,A, Θ, S)
 
-# 3) Create schema & seed 50 items
-npm run db:migrate
-npm run seed
+            LCB_AP = logit(lcb(sA_P,vA_P,delta)) + logit(lcb(sP_A,vP_A,delta))
+            LCB_AD = logit(lcb(sA_D,vA_D,delta)) + logit(lcb(sD_A,vD_A,delta))
+            diff.append(LCB_AP - LCB_AD)
 
-# 4) Start dev server
-npm run dev
-# http://localhost:3000
+        loss = mean(log1p(exp(-torch.tensor(diff)))) + R(Θ)
+        loss.backward(); optimizer.step(); optimizer.zero_grad()
 ```
 
-**Admin export locally:**
-
-```
-curl -L "http://localhost:3000/api/admin/export?key=YOUR_ADMIN_KEY" -o export.csv
-```
+All kernels are differentiable; the sign constraints are enforced by parameterization, so we don’t need a constrained optimizer.
 
 ---
 
-# Design/engineering choices that support publishable research
+## 6) How this beats the baseline (why it should work)
 
-1. **One‑screen triad** minimizes mode switches and mis‑clicks; arrow keys speed progress → lower fatigue and cleaner data.
-2. **Export schema matches your offline harness**, preventing post‑hoc reshaping errors.
-3. **Construct‑labeled questions** (TIPI, PVQ, etc.) ease later validity checks.
-4. **Seeding & versioning** gives stable, reproducible instruments across cohorts.
-5. **No scoring in app** keeps the data collection layer decoupled from analysis, improving auditability.
-
----
-
-## Files you just got (highlights)
-
-* `app/survey/[index]/page.tsx` — **the one‑question page** with triad UI, arrow‑key nav, autosave & transitions.
-* `app/api/response/route.ts` — **idempotent upsert** per item (SELF/ACC/IMP).
-* `scripts/export.ts` & `/api/admin/export` — produce **exactly** the CSV you need.
-* `data/questions.json` + `scripts/seed.ts` — seed **all 50 items** with response types & options.
-
-> If you later decide to measure **time‑on‑item** or **revision frequency**, we can add columns to `Response` and an `Event` log. If you pilot at scale, we can add a simple rate limiter and couple‑code rate limits.
+1. **From binary to probabilistic acceptability.** The baseline throws away signal whenever (d>t) by setting a hard zero. Our (F_i(t,d)) learns how much “too far” still helps, **item‑by‑item**.
+2. **Learning the importance scale.** ({0,1,10,50,250}) is an ordinal report, not a calibrated metric. (\lambda(\cdot)) lets the data discover how steep the scale should be for discrimination.
+3. **MC near‑misses.** The similarity kernel lets “accepted neighbors” contribute — especially valuable on small samples where strict set membership is brittle.
+4. **Principled small‑overlap handling.** The LCB replaces a hand‑tuned (c/\sqrt n) with a **variance‑aware** shrinkage and an interpretable δ knob.
+5. **Direct optimization of what you measure.** Pairwise logistic aligns training with your AUC/Hit@K decision rule.
 
 ---
 
-### Background (for your “methods” and advisor deck)
+## 7) Ablations & sensitivity (deliverable C)
 
-* You’ll evaluate “OkCupid‑style” triads with importance weighting **offline** on this dataset; later, you’ll transform compatibility scores to **ordinal preference lists** and study **stable matching** properties (e.g., DA’s truthfulness for proposers, equal‑treatment‑of‑equals in randomized variants, etc.) on pilot cohorts. See COS 445 notes for formal definitions and properties of stability, DA, RSD, and probabilistic serial mechanisms (useful in fairness discussions).  
+* **A1**: Remove LCB (use raw (\hat s)) → quantify the value of uncertainty.
+* **A2**: Replace learned (\lambda) with identity on ({0,1,10,50,250}).
+* **A3**: Freeze domain weights to baseline vs. learn (m_d,\psi).
+* **A4**: Likert hard thresholds (baseline indicator) vs. learned (F_i(t,d)).
+* **A5**: MC exact‑set check vs. soft similarity.
+* **A6**: Aggregator comparison: additive logits (ours) vs. geometric mean (baseline) vs. arithmetic mean.
+* **A7**: Penalty comparison: LCB vs. (c/\sqrt n) tuned via CV.
+* **A8**: Negative‑sampling rate (N\in{5,10,20,50}).
+* **A9**: δ in ({0.05,0.10,0.20}) for the score and for matching.
+
+Each ablation re‑runs the exact evaluation harness to report AUC, median‑rank, Hit@K, lift, and paired‑bootstrap CIs (your existing protocol).
+
+---
+
+## 8) Interpretability (deliverable D)
+
+We emit the following artifacts per run:
+
+* **Distance–tolerance surfaces** (F_i(t,d)) for Likert items: 4×4 heatmaps (monotone by design).
+* **Importance calibration curve** (\lambda): a 5‑point monotone step plot with bootstrap CIs.
+* **Domain weights** (m_d) and Top‑3 multiplier (\psi) with CIs.
+* **Item influence**: average **marginal contribution** (\Delta_i = \mathbb E_{(A,B)}[W_i^A,(p_i^A(B)-\bar p_i)]) where (\bar p_i) is the item’s population mean pass probability; domain‑level aggregation yields contribution bars.
+* **Per‑pair explanations**: for any pair ((A,B)) in `scores.csv` we attach the top (k) positive/negative item contributions (W_i^A (p_i^A(B)-0.5)) and (W_i^B (p_i^B(A)-0.5)).
+
+---
+
+## 9) Complexity & “anytime” updates
+
+* **Scoring**: (O(|\mathcal I_{AB}|)) per direction.
+* **Training**: For (C) couples, negatives (N), epochs (E): (O(E\cdot C\cdot N\cdot \bar I)), with (\bar I) mean overlap (≤50). CPU‑friendly (tens of seconds to minutes on pilot).
+* **Streaming**: SGD on new triples supports **incremental checkpoints**; the MC similarities can be recomputed periodically (or held fixed).
+
+---
+
+## 10) Robustness & small‑sample notes
+
+* **Regularization**: (\ell_2) on all free parameters; shrink (a_{i,c},b_{i,r}) toward 0 (flat surface) when data are scarce.
+* **Pooling**: If desired, pool items within a domain by tying (\alpha_i) across the domain (hierarchical variant in the PDF).
+* **Missingness**: Items with (W_i^A=0) or unanswered are ignored in sums; effective sample size (n_{\mathrm{eff}}) automatically reflects sparsity/weight concentration.
+* **Default MC acceptance**: If Acceptable is blank, we set (S_i^A={x_i^A}) (your current rule) and the model still gains from soft similarity via (s_i).
+
+---
+
+## 11) What goes in the **methods PDF** (deliverable A)
+
+1. **Model**: data, kernels (F_i(t,d)), MC similarity construction, (\lambda), (m_d,\psi).
+2. **Learning**: pairwise logistic; constraints via reparam.; regularization; complexity.
+3. **Theory**: monotonicity lemma; AUC‑consistency theorem (with assumptions); LCB coverage; δ‑stability lemma; proof sketches + references.
+4. **Robustness**: small‑sample behavior; independence approximation; misreporting discussion.
+5. **Matching**: lists from LCBs; choice of τ and δ; properties; deployment knobs.
+6. **Ethics**: no sensitive features; uncertainty surfaced to users; caveats on interpretability.
+
+---
+
+## 12) Expected repository outputs (deliverables B, C, D)
+
+* `scores.csv`: `A,B,score,dir_s_A,dir_s_B,lcb_A,lcb_B,n_eff_A,n_eff_B,overlap_items,...`
+* `summary.csv`: AUC, median‑rank, Hit@K, lift, paired‑bootstrap CIs, permutation p‑value.
+* `interp/` figures: (F_i(t,d)) grids; (\lambda) curve; (m_d,\psi) bars; item and domain contributions.
+* `matching.json`: (optional) stable matching with δ‑stability setting and reasons for any incomplete lists.
+
+---
+
+## 13) Comparison to your baseline (control to beat)
+
+* **Where it generalizes the baseline**
+  – If we force (a_{i,1}=a_{i,2}=a_{i,3}=-\infty) except at (d\le t), and (\lambda) identity, and (\psi,m_d) fixed, **PAM collapses to v1.0** up to the aggregator.
+* **Where it improves**
+  – Learns **soft edges** at item level; calibrates **importance**; handles **small overlap** via **LCB**; optimizes the **pairwise decision rule** you actually evaluate.
+
+---
+
+## 14) Sensible defaults (to run today)
+
+* Negatives per person (N=20) (as in your eval).
+* (\delta=0.10) for scoring LCBs (tunable; keep same at matching time).
+* Learning rate (1\mathrm{e}{-2}), Adam, batch 128 triples, early stop on val AUC.
+* Regularization: weight decay (1\mathrm{e}{-4}); Gaussian priors for (m_d,\psi) centered at your baseline multipliers (stdev 0.5 on log‑scale).
+* MC similarity (s_i): Jaccard of co‑acceptance across participants (clip to ([0,1])); cache matrices.
+
+---
+
+### Appendix: concise proofs (for the methods draft)
+
+* **Monotonicity**: In the Likert kernel, (d\mapsto\sum_c a_{i,c}\mathbf 1[d\ge c]) is a sum of non‑positive steps; (t\mapsto\sum_r b_{i,r}\mathbf 1[t\ge r]) is a sum of non‑negative steps; the logistic is increasing ⇒ (F_i) is antitone in (d), isotone in (t). The MC kernel is isotone in (\mathrm{sim}) by (\eta_i\ge 0). (\lambda) is monotone by construction; hence directional satisfaction is monotone in tolerance and importance.
+* **AUC‑consistency (sketch)**: The pairwise logistic risk on score differences is a proper composite loss; if (\mathrm{Score}\in\mathcal F) where (\mathcal F) contains the Bayes score difference (which, on the finite grid ({0,1,2,3}^2), can be represented by (F_i) via step functions), minimizing the surrogate implies maximizing the AUC in the limit.
+* **δ‑stability (sketch)**: For any pair ((u,v)), if (\underline s_u^\delta(v)\le \underline s_u^\delta(\pi(u))) or (\underline s_v^\delta(u)\le \underline s_v^\delta(\pi(v))) in the constructed lists, then with probability ≥ (1-\delta) each inequality persists for the true (s); taking both directions and union bound gives ≤ (2\delta) chance of a true blocking pair.
+
+---
+
+## What I’ll provide right away in code (mapped to your repo)
+
+* Monotone Likert and MC kernels with differentiable, sign‑constrained params.
+* λ importance calibration and learned (m_d,\psi).
+* Directional satisfaction + LCB with Kish (n_{\mathrm{eff}}).
+* Pairwise logistic training loop with your negative‑sampling protocol.
+* Scoring → `scores.csv`; evaluation → `summary.csv`; plots.
+* Matching utilities producing δ‑stable lists and a final matching.
+
+If you want me to tailor the naming and CLI switches to exactly match your existing `evaluate_couples.py` interface, I’ll mirror those argument names so you can run both the **baseline** and **PAM** with the same wrappers.
+
+---
+
+### Quick checklist against your §7
+
+1. **Uses the triad deeply**: yes — SELF enters via distance; ACCEPTABLE via tolerance/set; IMPORTANCE via learned λ; domains via learned (m_d) and Top‑3 boost.
+2. **Clear math + theory**: kernels, objective, constraints, LCB; monotonicity, AUC‑consistency sketch, δ‑stability.
+3. **Improves discrimination**: optimized directly for pairwise outranking with soft acceptability and calibrated importance; uncertainty improves small‑n behavior.
+4. **Interpretability**: item‑level (F_i(t,d)), λ, (m_d), and per‑pair contributions.
+5. **Maps to matching**: LCB‑ranked lists, stable matching with a probabilistic guarantee.
+6. **Practical/anytime**: CPU‑friendly SGD; negative sampling; cached MC similarities; checkpointable

@@ -223,6 +223,11 @@ async function main(){
     console.log(' 5) Show ML scores')
     console.log(' 6) Change variant (current: '+variant+')')
     console.log(' 7) Change nonpartner_samples (current: '+nps+')')
+    console.log(' 8) Run PAM (probabilistic) evaluation')
+    console.log(' 9) Show PAM pair scores')
+    console.log('10) Build PAM lists + demo matching')
+    console.log('11) Train PAM domain weights')
+    console.log('12) Run PAM evaluation with trained weights')
     console.log(' 0) Quit')
     const sel = await prompt('Select')
     if (sel==='0') break
@@ -247,6 +252,52 @@ async function main(){
         if (v) variant = v
       } else if (sel==='7'){
         nps = Number(await prompt('nonpartner_samples', String(nps))) || nps
+      } else if (sel==='8'){
+        const delta = await prompt('delta (LCB quantile)', '0.10')
+        console.log('Running PAM evaluation…')
+        await run(py, ['eval/evaluate_pam.py','--export_csv','../export.csv','--couples_csv','../couples.csv','--meta_json','meta.json','--questions_json','../data/questions.json','--delta', String(Number(delta)||0.10),'--nonpartner_samples', String(nps),'--out','out/summary_pam.csv'], algDir)
+        console.log('PAM evaluation complete → tiger-alg/out/summary_pam.csv and *.pairs.csv')
+      } else if (sel==='9'){
+        const pref = await prompt('show trained weights results? (y/N)', 'N')
+        const basePath = path.join(algDir, 'out', 'summary_pam.pairs.csv')
+        const trainedPath = path.join(algDir, 'out_pam', 'summary_pam.pairs.csv')
+        const chosen = (pref.trim().toLowerCase()==='y' && fs.existsSync(trainedPath)) ? trainedPath : basePath
+        if (!fs.existsSync(chosen)) { console.log(`No PAM pairs at ${chosen}. Run option ${pref.trim().toLowerCase()==='y' ? '12' : '8'} first.`); continue }
+        const lines = fs.readFileSync(chosen, 'utf8').split(/\r?\n/).filter(Boolean)
+        if (lines.length<=1){ console.log('(no PAM pairs)'); continue }
+        const header = parseCsvLine(lines[0]).map(unquote)
+        const idxScore = header.indexOf('score')
+        const idxPct = header.indexOf('pct_baseline_like')
+        const recs = lines.slice(1).map(ln=>{ const cols=parseCsvLine(ln); return {
+          A: unquote(cols[0]||''), B: unquote(cols[1]||''),
+          score: Number(cols[idxScore]||'0'),
+          pct: idxPct>=0 ? Number(cols[idxPct]||'0') : NaN,
+        } })
+        recs.sort((a,b)=> b.score - a.score)
+        console.log(`\nTop PAM pairs${chosen.includes('out_pam') ? ' (trained)' : ''}:`)
+        for (const r of recs.slice(0,20)){
+          const pctStr = Number.isFinite(r.pct) ? `  ${r.pct.toFixed(1)}%` : ''
+          console.log(`${r.A} ⇄ ${r.B}  ${r.score.toFixed(4)}${pctStr}`)
+        }
+      } else if (sel==='10'){
+        const delta = await prompt('delta (LCB for scores)', '0.10')
+        const tau = await prompt('tau (drop if LCB_A < tau)', '0.20')
+        console.log('Scoring pairs for lists…')
+        await run(py, ['scoring/score_pairs_cli.py','--export_csv','../export.csv','--meta_json','meta.json','--questions_json','../data/questions.json','--delta', String(Number(delta)||0.10),'--out','scores.csv'], algDir)
+        await run(py, ['matching/rankings.py','--scores_csv','scores.csv','--tau', String(Number(tau)||0.20),'--out','lists.json'], algDir)
+        await run(py, ['matching/stable.py','--lists','lists.json','--mode','bipartite','--out','matching.json'], algDir)
+        console.log('Lists → tiger-alg/lists.json, Matching → tiger-alg/matching.json')
+      } else if (sel==='11'){
+        const delta = await prompt('delta (LCB for features)', '0.10')
+        console.log('Training PAM domain weights…')
+        await run(py, ['train/trainer.py','--export_csv','../export.csv','--couples_csv','../couples.csv','--meta_json','meta.json','--questions_json','../data/questions.json','--outdir','out_pam','--delta', String(Number(delta)||0.10)], algDir)
+        console.log('Learned weights → tiger-alg/out_pam/weights.json')
+      } else if (sel==='12'){
+        const delta = await prompt('delta (LCB for evaluation)', '0.10')
+        const w = path.join(algDir, 'out_pam', 'weights.json')
+        if (!fs.existsSync(w)) { console.log('No weights file at tiger-alg/out_pam/weights.json. Run option 11 first.'); continue }
+        await run(py, ['eval/evaluate_pam.py','--export_csv','../export.csv','--couples_csv','../couples.csv','--meta_json','meta.json','--questions_json','../data/questions.json','--delta', String(Number(delta)||0.10),'--nonpartner_samples', String(nps),'--weights_json','out_pam/weights.json','--out','out_pam/summary_pam.csv'], algDir)
+        console.log('PAM evaluation (learned weights) complete → tiger-alg/out_pam/')
       } else {
         console.log('Unknown selection')
       }

@@ -28,9 +28,12 @@ raw_evaluations.json
 processed_snippets.json
 client/dist/
 *.csv
+*/*.csv
 tiger-alg/out/
 tiger-alg/meta.json
 tiger-alg/out_ml/
+*.json
+*/*.json
 
 # Python Specific
 __pycache__

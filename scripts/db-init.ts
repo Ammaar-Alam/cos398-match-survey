@@ -15,7 +15,7 @@ async function main() {
     id UUID PRIMARY KEY,
     couple_id UUID REFERENCES couples(id) ON DELETE SET NULL,
     full_name TEXT NOT NULL,
-    net_id TEXT NOT NULL,
+    net_id TEXT,
     email TEXT,
     started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     completed_at TIMESTAMP WITH TIME ZONE
