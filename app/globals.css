@@ -13,14 +13,25 @@ body { @apply bg-white text-slate-900; }
 
 /* light component utility styles */
 .choice { 
-  @apply border-2 rounded-xl px-2.5 py-1.5 text-center cursor-pointer transition-all duration-200 w-full text-[13px] sm:text-[15px];
+  @apply border rounded-lg px-0.5 py-1 text-center cursor-pointer transition-all duration-200 w-full text-[11px] sm:text-[15px];
   @apply hover:border-brand-400 hover:bg-brand-50/50;
   @apply active:scale-95;
   @apply flex items-center justify-center;
-  min-height: 46px;
+  min-height: 38px;
+}
+@media (min-width: 640px) {
+  .choice {
+    @apply border-2 rounded-xl px-2.5 py-1.5;
+    min-height: 46px;
+  }
 }
 .choice-selected { 
-  @apply border-brand-600 ring-2 ring-brand-200 bg-brand-50 shadow-sm;
+  @apply border-brand-600 ring-1 ring-brand-200 bg-brand-50 shadow-sm;
+}
+@media (min-width: 640px) {
+  .choice-selected {
+    @apply ring-2;
+  }
 }
 .choice-acceptable {
   @apply border-emerald-400 bg-emerald-50/50 ring-1 ring-emerald-200;

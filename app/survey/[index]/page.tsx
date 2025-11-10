@@ -271,14 +271,14 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
           {(q.section || q.construct) && (
             <div className="text-xs uppercase tracking-wider text-slate-400 mb-2 font-medium">{q.section?.split(') ')[1] || q.section}{q.construct ? ` • ${q.construct}` : ''}</div>
           )}
-          <div className="card p-5 sm:p-6 shadow-lg">
-            <h2 className="text-xl sm:text-2xl font-semibold tracking-tight mb-5 text-slate-900 leading-tight">{q.text}</h2>
-            <div className="space-y-5 divide-y divide-slate-200">
+          <div className="card p-4 sm:p-6 shadow-lg">
+            <h2 className="text-lg sm:text-2xl font-semibold tracking-tight mb-4 text-slate-900 leading-tight">{q.text}</h2>
+            <div className="space-y-4 divide-y divide-slate-200">
               <section className="pt-0">
-                <div className="text-sm font-semibold mb-1 text-slate-800">{COPY.triad.self.title}</div>
-                <p className="text-xs text-slate-500 mb-2">{COPY.triad.self.help}</p>
+                <div className="text-xs sm:text-sm font-semibold mb-1 text-slate-800">{COPY.triad.self.title}</div>
+                <p className="text-[11px] sm:text-xs text-slate-500 mb-2">{COPY.triad.self.help}</p>
                 {q.responseType.startsWith('Likert') ? (
-                  <div className={`grid ${intFromType(q.responseType) === 7 ? 'grid-cols-7' : intFromType(q.responseType) === 6 ? 'grid-cols-6' : 'grid-cols-5'} gap-2 sm:gap-3`}>
+                  <div className={`grid ${intFromType(q.responseType) === 7 ? 'grid-cols-7' : intFromType(q.responseType) === 6 ? 'grid-cols-6' : 'grid-cols-5'} gap-0.5 sm:gap-3`}>
                     {Array.from({ length: intFromType(q.responseType) }).map((_, i) => {
                       const label = String(i + 1)
                       const isSelected = selfAnswer === label
@@ -290,9 +290,9 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
                       return (
                         <label key={i} className={`choice ${isSelected ? 'choice-selected' : ''} ${isSelected ? 'scale-105' : ''} ${isHighlighted ? 'choice-acceptable' : ''}`} aria-label={verbal || `Option ${label}`}>
                           <input className="sr-only" type="radio" name="self" value={label} onChange={() => onSetSelf(label)} />
-                          <span className="font-semibold">
+                          <span className="font-semibold text-sm sm:text-base">
                             {label}
-                            {verbal && <span className="block text-xs text-slate-500 mt-0.5">{verbal}</span>}
+                            {verbal && <span className="block text-[8px] leading-tight sm:text-xs text-slate-500 mt-0.5">{verbal}</span>}
                           </span>
                         </label>
                       )
@@ -346,13 +346,13 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
               </section>
 
               <section className="pt-4">
-                <div className="text-sm font-semibold mb-1 text-slate-800">{COPY.triad.acceptable.title}</div>
-                <p className="text-xs text-slate-500">{COPY.triad.acceptable.help}</p>
-                <p className="text-[11px] mb-1 text-slate-500">{COPY.triad.acceptable.tip}</p>
+                <div className="text-xs sm:text-sm font-semibold mb-1 text-slate-800">{COPY.triad.acceptable.title}</div>
+                <p className="text-[11px] sm:text-xs text-slate-500">{COPY.triad.acceptable.help}</p>
+                <p className="text-[10px] sm:text-[11px] mb-1 text-slate-500">{COPY.triad.acceptable.tip}</p>
                 {q.responseType.startsWith('Likert') ? (
-                  <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm">
-                    <div className="flex flex-wrap gap-2 mb-4">
-                      <button type="button" onClick={() => onSetAcceptableRange((acceptable?.mode === 'range' ? acceptable?.tol : '±2 steps') || '±2 steps')} className={`px-4 py-1.5 rounded-full text-sm font-medium transition ${acceptable?.mode !== 'values' ? 'bg-brand-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                  <div className="rounded-2xl border border-slate-200 bg-white/80 p-3 sm:p-4 shadow-sm">
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      <button type="button" onClick={() => onSetAcceptableRange((acceptable?.mode === 'range' ? acceptable?.tol : '±2 steps') || '±2 steps')} className={`px-3 sm:px-4 py-1.5 rounded-full text-xs sm:text-sm font-medium transition ${acceptable?.mode !== 'values' ? 'bg-brand-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
                         Pick a range
                       </button>
                       <button type="button" onClick={() => {
@@ -362,14 +362,14 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
                           return { mode: 'values', vals: initial }
                         })
                         setTimeout(() => maybeAutosave(), 0)
-                      }} className={`px-4 py-1.5 rounded-full text-sm font-medium transition ${acceptable?.mode === 'values' ? 'bg-brand-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                      }} className={`px-3 sm:px-4 py-1.5 rounded-full text-xs sm:text-sm font-medium transition ${acceptable?.mode === 'values' ? 'bg-brand-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
                         Choose specific values
                       </button>
                     </div>
                     {acceptable?.mode === 'values' ? (
                       <div>
-                        <div className="text-xs uppercase tracking-wide text-slate-500 mb-2">Tap the answers you’d accept</div>
-                        <div className={`grid ${intFromType(q.responseType) === 7 ? 'grid-cols-7' : intFromType(q.responseType) === 6 ? 'grid-cols-6' : 'grid-cols-5'} gap-2 sm:gap-3`}>
+                        <div className="text-[10px] sm:text-xs uppercase tracking-wide text-slate-500 mb-2">Tap the answers you'd accept</div>
+                        <div className={`grid ${intFromType(q.responseType) === 7 ? 'grid-cols-7' : intFromType(q.responseType) === 6 ? 'grid-cols-6' : 'grid-cols-5'} gap-0.5 sm:gap-3`}>
                           {Array.from({ length: intFromType(q.responseType) }).map((_, i) => {
                             const val = String(i + 1)
                             const active = acceptable?.vals?.includes(val)
@@ -383,8 +383,8 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
                                 })
                                 setTimeout(() => maybeAutosave(), 0)
                               }} className={`choice flex flex-col items-center justify-center text-center ${active ? 'choice-selected scale-105' : ''}`}>
-                                <span className="font-semibold">{val}</span>
-                                {label && <span className="text-[11px] text-slate-500">{label}</span>}
+                                <span className="font-semibold text-sm sm:text-base">{val}</span>
+                                {label && <span className="block text-[8px] leading-tight sm:text-[11px] text-slate-500">{label}</span>}
                               </button>
                             )
                           })}
@@ -393,8 +393,8 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
                       </div>
                     ) : (
                       <div>
-                        <div className="text-xs uppercase tracking-wide text-slate-500 mb-2">Pick a tolerance band</div>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
+                        <div className="text-[10px] sm:text-xs uppercase tracking-wide text-slate-500 mb-2">Pick a tolerance band</div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5 sm:gap-3">
                           {ACCEPTABLE_LIKERT.map(label => {
                             const isSelected = acceptable?.mode === 'range' && acceptable?.tol === label
                             const isStrict = label === 'Same answer'
@@ -430,15 +430,15 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
               </section>
 
               <section className="pt-4">
-                <div className="text-sm font-semibold mb-1 text-slate-800">{COPY.triad.importance.title}</div>
-                <p className="text-xs text-slate-500 mb-3">{COPY.triad.importance.help}</p>
-                <div className="grid grid-cols-5 gap-2 sm:gap-3">
+                <div className="text-xs sm:text-sm font-semibold mb-1 text-slate-800">{COPY.triad.importance.title}</div>
+                <p className="text-[11px] sm:text-xs text-slate-500 mb-2">{COPY.triad.importance.help}</p>
+                <div className="grid grid-cols-5 gap-0.5 sm:gap-3">
                   {LIKERT5_IMPORTANCE.map(label => {
                     const isSelected = importance === label
                     return (
                       <label key={label} title="This weight affects the match algorithm only." className={`choice flex items-center justify-center ${isSelected ? 'choice-selected' : ''} ${isSelected ? 'scale-105' : ''} transition-transform`}>
                         <input className="sr-only" type="radio" name="imp" value={label} onChange={() => onSetImportance(label)} />
-                        <span className="text-sm sm:text-base font-medium text-center">{label}</span>
+                        <span className="text-[10px] sm:text-base font-medium text-center leading-tight">{label}</span>
                       </label>
                     )
                   })}
