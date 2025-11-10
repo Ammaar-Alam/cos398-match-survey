@@ -73,7 +73,7 @@ Useful commands:
 ## Routes / UI
 - `/` — intro page, study context, CTA.
 - `/start` — register with **Couple Code**, **Full name**, **NetID**, optional email/months.
-- `/survey/[index]` — one question per page, **triad** UI (self / acceptable / importance), **arrow‑key** nav, progress %. Likert items display verbal anchors (TIPI 7‑point agree, PVQ 6‑point PVQ portraits). Acceptable for Likert defaults to **±2 steps** after selecting your self‑answer (you can change it).
+- `/survey/[index]` — one question per page, **triad** UI (self / acceptable / importance), **arrow‑key** nav, progress %. Likert items display verbal anchors (TIPI 7‑point agree, PVQ 6‑point PVQ portraits). Acceptable defaults after selecting your self‑answer: **±2 steps for 7‑point** items and **±1 step for 6‑point** items (you can change it).
 - `/done` — thank-you page.
 - `/privacy` — static.
 - `/api/register` — POST to create or join couple; returns `{ participantId }` (stored client-side).
@@ -118,6 +118,6 @@ Set `ENABLE_IMC=true` in the environment to inject a single instructional manipu
 
 ## Keyboard navigation and UX
 - Right/Left arrows = Next/Back
-- Default acceptable (Likert) = `±2 steps`; default importance = `A little (1)`
+- Default acceptable: `Likert7 → ±2 steps`, `Likert6 → ±1 step`; default importance = `A little (1)`
 - Q47 (Top priorities) now enforces a maximum of 3 selections for Self.
 - Mobile-friendly hit targets for choices.

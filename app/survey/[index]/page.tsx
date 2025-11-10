@@ -214,9 +214,10 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
   function onSetSelf(val: string) {
     setSelfAnswer(val)
     if (q && q.responseType.startsWith('Likert')) {
-      setAcceptable(prev => {
+      setAcceptable((prev: any) => {
         if (!prev) {
-          return { mode: 'range', tol: '±2 steps' }
+          const tol = defaultTolForLikert(q.responseType)
+          return { mode: 'range', tol }
         }
         if (prev.mode === 'values') {
           return prev
@@ -352,11 +353,14 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
                 {q.responseType.startsWith('Likert') ? (
                   <div className="rounded-2xl border border-slate-200 bg-white/80 p-3 sm:p-4 shadow-sm">
                     <div className="flex flex-wrap gap-2 mb-3">
-                      <button type="button" onClick={() => onSetAcceptableRange((acceptable?.mode === 'range' ? acceptable?.tol : '±2 steps') || '±2 steps')} className={`px-3 sm:px-4 py-1.5 rounded-full text-xs sm:text-sm font-medium transition ${acceptable?.mode !== 'values' ? 'bg-brand-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                      <button type="button" onClick={() => {
+                        const defTol = defaultTolForLikert(q.responseType)
+                        onSetAcceptableRange((acceptable?.mode === 'range' ? acceptable?.tol : defTol) || defTol)
+                      }} className={`px-3 sm:px-4 py-1.5 rounded-full text-xs sm:text-sm font-medium transition ${acceptable?.mode !== 'values' ? 'bg-brand-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
                         Pick a range
                       </button>
                       <button type="button" onClick={() => {
-                        setAcceptable(prev => {
+                        setAcceptable((prev: any) => {
                           if (prev?.mode === 'values') return prev
                           const initial = prev?.vals?.length ? prev.vals : selfAnswer ? [selfAnswer] : []
                           return { mode: 'values', vals: initial }
@@ -376,7 +380,7 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
                             const label = q.anchors?.[i] ?? (q.responseType === 'Likert7' ? LIKERT7[i] : q.responseType === 'Likert6' ? LIKERT6[i] : undefined)
                             return (
                               <button key={val} type="button" onClick={() => {
-                                setAcceptable(prev => {
+                                setAcceptable((prev: any) => {
                                   const set = new Set(prev?.vals || [])
                                   set.has(val) ? set.delete(val) : set.add(val)
                                   return { mode: 'values', vals: [...set] }
@@ -478,6 +482,12 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
 
 function intFromType(t: string) { if (t === 'Likert7') return 7; if (t === 'Likert6') return 6; return 5 }
 function labelFromImportance(v: number) { const map: Record<number, string> = { 0: 'Irrelevant', 1: 'A little', 10: 'Somewhat', 50: 'Very', 250: 'Mandatory' }; return map[v] }
+
+function defaultTolForLikert(responseType: string): '±2 steps' | '±1 step' {
+  // 7-option (e.g., TIPI) defaults to ±2; 6-option defaults to ±1
+  const n = intFromType(responseType)
+  return n === 6 ? '±1 step' : '±2 steps'
+}
 
 function getAcceptableValues(selfAnswer: string, acceptable: any, maxValue: number): Set<string> {
   if (!selfAnswer || !acceptable) return new Set()
