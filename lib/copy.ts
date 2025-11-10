@@ -21,7 +21,7 @@ export const COPY = {
     },
     tipi: {
       title: 'Big Five (TIPI)',
-      intro: 'For each trait, pick how much it sounds like you. Then choose what would be okay from a partner, and how much it should matter for your match.'
+      intro: 'For each trait, pick how much it sounds like you. You should rate theextent to which the pair of traits applies to youThen choose what would be okay from a partner, and how much it should matter for your match.'
     },
     mc_single: {
       title: 'Single choice',
