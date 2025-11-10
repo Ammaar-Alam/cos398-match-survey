@@ -90,7 +90,7 @@ export default function Done() {
             <li>Want to compare one another's answers, or change them and see how your match score changes? Feel free, but just let me know in advance so it doesn't affect our analysis.</li>
           </ul>
           <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-            <Link href="mailto:tigermatch@princeton.edu" className="flex-1 rounded-md bg-brand-600 px-4 py-2 text-center text-white shadow-sm hover:bg-brand-700">Email Ammaar</Link>
+            <Link href="/survey/1?review=1" className="flex-1 rounded-md bg-brand-600 px-4 py-2 text-center text-white shadow-sm hover:bg-brand-700">Review / Change Answers</Link>
             <Link href="/" className="flex-1 rounded-md border border-slate-300 px-4 py-2 text-center font-medium text-slate-700 hover:bg-slate-50">Back to home</Link>
           </div>
         </section>

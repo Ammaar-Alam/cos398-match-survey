@@ -1,8 +1,9 @@
 "use client"
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { LIKERT5_IMPORTANCE, ACCEPTABLE_LIKERT, LIKERT6, LIKERT7 } from '../../../lib/scales'
+import { COPY } from '../../../lib/copy'
 
 type Question = {
   id: string
@@ -40,6 +41,8 @@ function fireAndForgetSave(payload: any) {
 
 export default function SurveyPage({ params }: { params: { index: string } }) {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const reviewMode = searchParams?.get('review') === '1'
   const idx0 = Math.max(0, parseInt(params.index, 10) - 1) || 0
   const [questions, setQuestions] = useState<Question[]>([])
   const [q, setQ] = useState<Question | null>(null)
@@ -67,7 +70,7 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
   }, [router])
 
   useEffect(() => {
-    if (!participantId) return
+    if (!participantId || reviewMode) return
     fetch(`/api/progress?participantId=${participantId}`)
       .then(res => res.ok ? res.json() : null)
       .then(data => {
@@ -76,7 +79,7 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
         }
       })
       .catch(() => {})
-  }, [participantId, router])
+  }, [participantId, router, reviewMode])
   useEffect(() => {
     if (questions.length > 0) {
       const qq = questions[idx0]
@@ -132,24 +135,13 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
   const prevProgress = idx0 > 0 ? Math.round((idx0 / total) * 100) : 0
   // section intro logic
   const showSectionIntro = idx0 === 0 || questions[idx0]?.section !== questions[idx0 - 1]?.section
-  function sectionIntroFor(section?: string): { title: string; body: string } | null {
-    if (!section) return null
-    const s = section.toLowerCase()
-    if (s.includes('tipi')) return { title: 'Personality (TIPI)', body: 'Answer about YOU: rate how much you agree with each statement. Then choose what answers would be acceptable in a partner and how important alignment on that item should be for matching.' }
-    if (s.includes('pvq')) return { title: 'Core Values (PVQ‑21)', body: 'Portrait method: each item describes “he/she…”. Rate how much this sounds like YOU (Very much like me → Not like me at all). Then specify acceptable partner answers and how important matching on this value should be.' }
-    if (s.includes('social')) return { title: 'Social Preferences', body: 'First answer about YOU. Then indicate what you would accept from a partner and how much matching on this should matter.' }
-    if (s.includes('communication')) return { title: 'Communication & Friendship', body: 'First answer about YOU. Then specify acceptable partner answers and how important alignment is.' }
-    if (s.includes('habits') || s.includes('lifestyle')) return { title: 'Daily Habits & Lifestyle', body: 'Answer about YOUR typical habits. Then mark acceptable partner answers and match importance.' }
-    if (s.includes('priorities') || s.includes('deal')) return { title: 'Priorities & Deal‑breakers', body: 'Answer about YOU. Then specify what you can accept in a partner and how strongly this should influence matching.' }
-    return { title: section, body: 'Answer about YOU. Then specify acceptable partner answers and how important matching on this should be.' }
-  }
-  function isTIPI(section?: string) { return !!section?.toLowerCase().includes('tipi') }
-  function isPVQ(section?: string) { return !!section?.toLowerCase().includes('pvq') }
-  function selfHelper(section?: string, responseType?: string): string {
-    if (isPVQ(section)) return 'Portrait method: rate how much this sounds like YOU.'
-    if (isTIPI(section)) return 'Rate how much you agree with the statement about YOU.'
-    if (responseType?.startsWith('Likert')) return 'Rate how much this describes YOU.'
-    return 'Choose the option that best fits YOU.'
+  function sectionIntroFor(section?: string, responseType?: string) {
+    const normalized = (section || '').toLowerCase()
+    if (normalized.includes('pvq')) return COPY.sections.pvq21
+    if (normalized.includes('tipi')) return COPY.sections.tipi
+    if (responseType === 'MC_MULTI') return COPY.sections.mc_multi
+    if (responseType && responseType.startsWith('MC_')) return COPY.sections.mc_single
+    return COPY.sections.default
   }
 
   function withMeta(acc: any) {
@@ -193,7 +185,8 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
       setSaving(true)
       try { await saveResponse(payload); router.push('/done') } finally { setSaving(false) }
     } else {
-      fireAndForgetSave(payload); router.push(`/survey/${idx0 + 2}`)
+      const suffix = reviewMode ? '?review=1' : ''
+      fireAndForgetSave(payload); router.push(`/survey/${idx0 + 2}${suffix}`)
     }
   }
   async function goPrev() {
@@ -201,7 +194,8 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
     if (hasSelf() && importance && acceptable && q && participantId) {
       fireAndForgetSave({ participantId, questionId: q.id, selfAnswer: currentSelfPayload(), importance: parseImportance(importance), acceptable: JSON.stringify(withMeta(acceptable)), final: false })
     }
-    router.push(`/survey/${idx0}`)
+    const suffix = reviewMode ? '?review=1' : ''
+    router.push(`/survey/${idx0}${suffix}`)
   }
   function parseImportance(label: string) {
     const map: Record<string, number> = { 'Irrelevant': 0, 'A little': 1, 'Somewhat': 10, 'Very': 50, 'Mandatory': 250 }
@@ -250,11 +244,11 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
         </div>
       </div>
       {/* section intro card */}
-      {showSectionIntro && sectionIntroFor(q.section) && (
+      {showSectionIntro && sectionIntroFor(q.section, q.responseType) && (
         <div className="max-w-4xl mx-auto mb-4">
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <div className="text-sm font-semibold text-slate-900">{sectionIntroFor(q.section)!.title}</div>
-            <div className="text-sm text-slate-600">{sectionIntroFor(q.section)!.body}</div>
+            <div className="text-sm font-semibold text-slate-900">{sectionIntroFor(q.section, q.responseType)!.title}</div>
+            <div className="text-sm text-slate-600">{sectionIntroFor(q.section, q.responseType)!.intro}</div>
           </div>
         </div>
       )}
@@ -268,8 +262,8 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
             <h2 className="text-xl sm:text-2xl font-semibold tracking-tight mb-5 text-slate-900 leading-tight">{q.text}</h2>
             <div className="space-y-5 divide-y divide-slate-200">
               <section className="pt-0">
-                <div className="text-sm font-semibold mb-1 text-slate-800">About you</div>
-                <p className="text-xs text-slate-500 mb-2">{selfHelper(q.section, q.responseType)}</p>
+                <div className="text-sm font-semibold mb-1 text-slate-800">{COPY.triad.self.title}</div>
+                <p className="text-xs text-slate-500 mb-2">{COPY.triad.self.help}</p>
                 {q.responseType.startsWith('Likert') ? (
                   <div className={`grid ${intFromType(q.responseType) === 7 ? 'grid-cols-7' : intFromType(q.responseType) === 6 ? 'grid-cols-6' : 'grid-cols-5'} gap-2 sm:gap-3`}>
                     {Array.from({ length: intFromType(q.responseType) }).map((_, i) => {
@@ -339,8 +333,10 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
               </section>
 
               <section className="pt-4">
-                <div className="text-sm font-semibold mb-1 text-slate-800">Acceptable in a partner</div>
-                <p className="text-xs text-slate-500 mb-3">Which answers from a partner would still feel compatible to you for this question?</p>
+                <div className="text-sm font-semibold mb-1 text-slate-800">{COPY.triad.acceptable.title}</div>
+                <p className="text-xs text-slate-500">{COPY.triad.acceptable.help}</p>
+                <p className="text-[11px] mb-1 text-slate-500">{COPY.triad.acceptable.tip}</p>
+                {q.responseType.startsWith('Likert')}
                 {q.responseType.startsWith('Likert') ? (
                   <div className="grid gap-3">
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
@@ -409,8 +405,8 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
               </section>
 
               <section className="pt-4">
-                <div className="text-sm font-semibold mb-1 text-slate-800">Match importance</div>
-                <p className="text-xs text-slate-500 mb-3">How much should alignment on this question influence your match score?</p>
+                <div className="text-sm font-semibold mb-1 text-slate-800">{COPY.triad.importance.title}</div>
+                <p className="text-xs text-slate-500 mb-3">{COPY.triad.importance.help}</p>
                 <div className="grid grid-cols-5 gap-2 sm:gap-3">
                   {LIKERT5_IMPORTANCE.map(label => {
                     const isSelected = importance === label
