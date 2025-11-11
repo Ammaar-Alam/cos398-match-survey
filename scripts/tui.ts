@@ -7,6 +7,74 @@ import { pool } from '../lib/db'
 
 type ExportSource = 'api' | 'db'
 
+type ParticipantInfo = { name: string; netId: string; coupleCode: string }
+type RankedCandidate = { targetId: string; score: number; pct: number }
+
+type PreviewSelection = {
+  label: string
+  csvPath: string
+  variant: string
+}
+
+type PreviewConfig = {
+  key: string
+  label: string
+  csvName: string
+  variant: string
+  weights?: string
+  requires?: string
+}
+
+const PREVIEW_CONFIGS: PreviewConfig[] = [
+  { key: '1', label: 'Baseline — default domain weights', csvName: 'scores.csv', variant: 'Baseline (default weights)' },
+  { key: '2', label: 'Baseline + ML domain weights', csvName: 'scores_ml.csv', variant: 'Baseline + ML weights', weights: 'out/ml_weights.json', requires: 'out/ml_weights.json' },
+  { key: '3', label: 'PAM learned domain weights', csvName: 'scores_pam.csv', variant: 'PAM weights', weights: 'out_pam/weights.json', requires: 'out_pam/weights.json' },
+]
+
+async function ensurePairScores(py: string, algDir: string, cfg: PreviewConfig){
+  const delta = await prompt('delta (LCB for scores)', '0.10')
+  const args = ['scoring/score_pairs_cli.py','--export_csv','../export.csv','--meta_json','meta.json','--questions_json','../data/questions.json','--delta', String(Number(delta)||0.10),'--out', cfg.csvName]
+  if (cfg.weights) args.push('--weights_json', cfg.weights)
+  await run(py, args, algDir)
+  console.log(`Pair scores written → tiger-alg/${cfg.csvName}`)
+}
+
+async function choosePreviewSource(py: string, algDir: string): Promise<PreviewSelection | null>{
+  console.log('\nPreview data source:')
+  PREVIEW_CONFIGS.forEach(cfg => console.log(` ${cfg.key}) ${cfg.label}`))
+  console.log(' 4) Existing CSV path (skip recompute)')
+  const sel = (await prompt('Choose source', '1')).trim()
+  if (sel === '4'){
+    const custom = await prompt('Absolute or relative path to CSV', path.join(algDir, 'scores.csv'))
+    const resolved = path.isAbsolute(custom) ? custom : path.join(process.cwd(), custom)
+    if (!fs.existsSync(resolved)){
+      console.log(`File not found at ${resolved}`)
+      return null
+    }
+    return { label: 'Custom CSV', csvPath: resolved, variant: `Custom (${resolved})` }
+  }
+  const cfg = PREVIEW_CONFIGS.find(c => c.key === sel)
+  if (!cfg){
+    console.log('Unknown selection')
+    return null
+  }
+  if (cfg.requires && !fs.existsSync(path.join(algDir, cfg.requires))){
+    console.log(`Required file missing: tiger-alg/${cfg.requires}. Run the corresponding training option first.`)
+    return null
+  }
+  const csvPath = path.join(algDir, cfg.csvName)
+  const csvExists = fs.existsSync(csvPath)
+  const rebuildPrompt = csvExists ? `${cfg.csvName} exists. Recompute pair scores now? (Y/n)` : `${cfg.csvName} missing. Generate pair scores now? (Y/n)`
+  const rebuild = (await prompt(rebuildPrompt, 'Y')).trim().toLowerCase()
+  if (rebuild !== 'n' && rebuild !== 'no'){
+    await ensurePairScores(py, algDir, cfg)
+  } else if (!csvExists){
+    console.log(`No cached scores at tiger-alg/${cfg.csvName}. Re-run generation.`)
+    return null
+  }
+  return { label: cfg.label, csvPath, variant: cfg.variant }
+}
+
 async function prompt(question: string, def?: string) {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
   try {
@@ -105,6 +173,120 @@ function parseCsvLine(line: string): string[]{
   return out
 }
 function unquote(s: string){ return s?.replace(/^"|"$/g,'') }
+
+function loadParticipantMeta(exportPath: string){
+  if (!fs.existsSync(exportPath)) throw new Error('export.csv not found; run the export step first')
+  const lines = fs.readFileSync(exportPath, 'utf8').split(/\r?\n/).filter(Boolean)
+  if (lines.length <= 1) return new Map<string, ParticipantInfo>()
+  const header = parseCsvLine(lines[0]).map(unquote)
+  const pidIdx = header.indexOf('participantId')
+  const nameIdx = header.indexOf('fullName')
+  const netIdx = header.indexOf('netId')
+  const coupleIdx = header.indexOf('coupleCode')
+  const meta = new Map<string, ParticipantInfo>()
+  for (let i=1;i<lines.length;i++){
+    const cols = parseCsvLine(lines[i])
+    const pid = unquote(cols[pidIdx] || '')
+    if (!pid) continue
+    meta.set(pid, {
+      name: unquote(cols[nameIdx] || '') || '(unknown)',
+      netId: unquote(cols[netIdx] || ''),
+      coupleCode: unquote(cols[coupleIdx] || '')
+    })
+  }
+  return meta
+}
+
+function readRankings(csvPath: string){
+  if (!fs.existsSync(csvPath)) throw new Error(`Scores file not found at ${csvPath}`)
+  const lines = fs.readFileSync(csvPath, 'utf8').split(/\r?\n/).filter(Boolean)
+  if (lines.length <= 1) return new Map<string, RankedCandidate[]>()
+  const header = parseCsvLine(lines[0]).map(unquote)
+  const idxA = header.indexOf('A')
+  const idxB = header.indexOf('B')
+  const idxScore = header.indexOf('score')
+  const idxPct = header.indexOf('pct_baseline_like')
+  if (idxA === -1 || idxB === -1 || idxScore === -1) throw new Error('scores.csv missing A/B/score columns')
+  const out = new Map<string, RankedCandidate[]>()
+  for (let i=1;i<lines.length;i++){
+    const cols = parseCsvLine(lines[i])
+    const a = unquote(cols[idxA] || '')
+    const b = unquote(cols[idxB] || '')
+    const score = Number(unquote(cols[idxScore] || ''))
+    if (!a || !b || !Number.isFinite(score)) continue
+    const pct = idxPct >=0 ? Number(unquote(cols[idxPct] || '')) : NaN
+    const arr = out.get(a) || []
+    arr.push({ targetId: b, score, pct })
+    out.set(a, arr)
+  }
+  for (const arr of out.values()) arr.sort((x,y)=> y.score - x.score)
+  return out
+}
+
+function describeParticipant(id: string, meta: Map<string, ParticipantInfo>, short=false){
+  const info = meta.get(id)
+  if (!info) return id
+  const net = info.netId ? ` [${info.netId}]` : ''
+  const cc = info.coupleCode ? ` (${info.coupleCode})` : ''
+  if (short) return `${info.name || id}${net || ''}`
+  return `${info.name || '(unknown)'}${net} #${id}${cc}`
+}
+
+async function showIdealMatchPreview(py: string, algDir: string, exportPath: string){
+  if (!fs.existsSync(exportPath)){
+    console.log('export.csv not found. Run the export step first (options 1-2).')
+    return
+  }
+  const selection = await choosePreviewSource(py, algDir)
+  if (!selection) return
+  const participants = loadParticipantMeta(exportPath)
+  const rankings = readRankings(selection.csvPath)
+  if (rankings.size === 0){ console.log(`${selection.csvPath} does not contain any pair entries.`); return }
+  const entries = Array.from(rankings.entries()).map(([pid, matches]) => {
+    const top = matches[0]
+    if (!top) return null
+    const counterpart = rankings.get(top.targetId) || []
+    const counterpartTop = counterpart[0]
+    const counterpartRank = counterpart.findIndex(r => r.targetId === pid)
+    return { pid, matches, top, counterpartTop, counterpartRank }
+  }).filter(Boolean) as { pid: string, matches: RankedCandidate[], top: RankedCandidate, counterpartTop?: RankedCandidate, counterpartRank: number }[]
+  if (!entries.length){ console.log('No ranked matches found.'); return }
+  entries.sort((a,b)=> b.top.score - a.top.score)
+  let mutualCount = 0
+  console.log(`\nIdeal match preview (${entries.length} participants) — ${selection.variant}`)
+  console.log(`Source file: ${selection.csvPath}`)
+  console.log('')
+  entries.forEach((entry, idx) => {
+    const label = `${String(idx+1).padStart(2,' ')}. ${describeParticipant(entry.pid, participants)}`
+    const topLabel = describeParticipant(entry.top.targetId, participants)
+    const pctStr = Number.isFinite(entry.top.pct) ? `${entry.top.pct.toFixed(1)}% baseline-like` : 'n/a'
+    const mutual = entry.counterpartTop?.targetId === entry.pid
+    if (mutual) mutualCount++
+    let note = mutual ? '✓ mutual top choice' : '↦ no return ranking yet'
+    if (!mutual){
+      if (entry.counterpartRank >= 0){
+        note = `↦ ${describeParticipant(entry.top.targetId, participants, true)} ranks ${describeParticipant(entry.pid, participants, true)} #${entry.counterpartRank+1}`
+      } else if (entry.counterpartTop){
+        note = `↦ ${describeParticipant(entry.top.targetId, participants, true)} prefers ${describeParticipant(entry.counterpartTop.targetId, participants, true)}`
+      }
+    }
+    console.log(label)
+    console.log(`    ideal:  ${topLabel}`)
+    console.log(`            score=${entry.top.score.toFixed(4)}  ${pctStr}`)
+    console.log(`    status: ${note}`)
+    const extras = entry.matches.slice(1, 4)
+    if (extras.length){
+      const extraLine = extras.map((m, extraIdx)=>{
+        const short = describeParticipant(m.targetId, participants, true)
+        const pct = Number.isFinite(m.pct) ? `${m.pct.toFixed(1)}%` : 'n/a'
+        return `${extraIdx+2}. ${short} (${m.score.toFixed(3)}, ${pct})`
+      }).join(' | ')
+      console.log(`    next:   ${extraLine}`)
+    }
+    console.log('')
+  })
+  console.log(`\n${mutualCount}/${entries.length} participants currently have synchronous (mutual) top matches.`)
+}
 
 function readPerCouple(outDir: string){
   const p = path.join(outDir, 'per_couple_scores.csv')
@@ -228,6 +410,7 @@ async function main(){
     console.log('10) Build PAM lists + demo matching')
     console.log('11) Train PAM domain weights')
     console.log('12) Run PAM evaluation with trained weights')
+    console.log('13) Preview ideal matches (per participant)')
     console.log(' 0) Quit')
     const sel = await prompt('Select')
     if (sel==='0') break
@@ -298,6 +481,8 @@ async function main(){
         if (!fs.existsSync(w)) { console.log('No weights file at tiger-alg/out_pam/weights.json. Run option 11 first.'); continue }
         await run(py, ['eval/evaluate_pam.py','--export_csv','../export.csv','--couples_csv','../couples.csv','--meta_json','meta.json','--questions_json','../data/questions.json','--delta', String(Number(delta)||0.10),'--nonpartner_samples', String(nps),'--weights_json','out_pam/weights.json','--out','out_pam/summary_pam.csv'], algDir)
         console.log('PAM evaluation (learned weights) complete → tiger-alg/out_pam/')
+      } else if (sel==='13'){
+        await showIdealMatchPreview(py, algDir, exportPath)
       } else {
         console.log('Unknown selection')
       }
