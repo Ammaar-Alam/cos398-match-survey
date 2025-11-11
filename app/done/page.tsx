@@ -44,9 +44,11 @@ export default function Done() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <div>
-              <h2 className="text-lg font-semibold text-blue-900">Let me know when the couple is done</h2>
+              <h2 className="text-lg font-semibold text-blue-900">Is your partner done yet?</h2>
               <p className="text-sm text-blue-900/80">
-                Message me once you're both done and I'll begin calculating your match score and add the couple score to the training dataset.
+                If not, go bother them to finish :D
+                <br />
+                Once you're both done, your match score can be calculated and added to the training dataset.
               </p>
             </div>
           </div>

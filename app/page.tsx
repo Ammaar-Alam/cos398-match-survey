@@ -37,7 +37,50 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="mt-8 text-center text-sm text-slate-500">Questions? Contact Ammaar Alam. Participation is voluntary; you may withdraw at any time.</div>
+        <div className="mt-12 grid gap-5 lg:grid-cols-2">
+          <section className="rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-6 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">Research lens</p>
+            <h3 className="mt-1 text-2xl font-semibold text-slate-900">What we&apos;re modeling</h3>
+            <p className="mt-3 text-sm text-slate-700 leading-relaxed">
+              We&apos;re probing whether an interpretable scoring functional can consistently recover true partners from a massive synthetic negative sample. Each respondent yields a directed acceptability window (what you&apos;d tolerate) plus an importance gradient (how costly a mismatch is), which we treat as a utility surface. Those surfaces feed logistic, calibrated-margin, and boosted heuristics to see which rule best separates held-out couples from randomized pairings.
+            </p>
+            <div className="mt-4 space-y-3 text-sm text-slate-700">
+              <div className="flex items-start gap-2"><DotIcon/><span>Assemble mutuality tensors from answer / tolerance / importance vectors to capture asymmetric fit.</span></div>
+              <div className="flex items-start gap-2"><DotIcon/><span>Apply finite-sample regularization and light fairness constraints so the score stays interpretable.</span></div>
+              <div className="flex items-start gap-2"><DotIcon/><span>Track ROC/AUC lift, calibration, and stability to test whether a single algorithm can generalize across cohorts.</span></div>
+            </div>
+            <p className="mt-4 text-xs text-slate-500 italic">Bottom line: we&apos;re asking if an “optimal” couple-matching algorithm exists in practice and what guarantees it can honestly make.</p>
+          </section>
+
+          <section className="rounded-3xl border border-slate-200 bg-gradient-to-br from-white via-white to-blue-50/40 p-6 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">Participation &amp; outputs</p>
+            <h3 className="mt-1 text-2xl font-semibold text-slate-900">What you commit &amp; receive</h3>
+            <div className="mt-5 grid gap-4">
+              <div className="rounded-2xl border border-slate-100 bg-white/80 p-4 shadow-inner">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-400">Requirements</p>
+                <ul className="mt-3 space-y-3 text-sm text-slate-700">
+                  <li className="flex items-start gap-3"><BadgeCheckIcon/><span>Both partners complete the 50-question instrument separately but with the same Couple Code.</span></li>
+                  <li className="flex items-start gap-3"><BadgeCheckIcon/><span>Responses stay private; only aggregated statistics show up in COS 398 deliverables.</span></li>
+                  <li className="flex items-start gap-3"><BadgeCheckIcon/><span>After both submissions, you can request your compatibility score plus a short interpretation.</span></li>
+                </ul>
+              </div>
+              <div className="rounded-2xl border border-blue-100 bg-white p-4 text-sm text-blue-900 shadow-sm">
+                <div className="flex items-start gap-3">
+                  <svg className="mt-0.5 h-5 w-5 text-blue-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20 10 10 0 000-20z"/></svg>
+                  <p>
+                    The score is a research artifact—it measures how strongly the current model distinguishes your pair from synthetic matches. Think of it as a benchmark against the learned algorithm, not a deterministic forecast for your relationship.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div className="mt-6 rounded-2xl border border-indigo-100 bg-indigo-50/80 p-4 text-center text-sm text-indigo-900 shadow-sm">
+          Data collection is still underway; once enough datapoints are collected and the findings are finalized, the paper will be published for COS 398.
+        </div>
+
+        <div className="mt-8 text-center text-sm text-slate-500">Questions? Contact <a href="https://ammaaralam.com" className="text-blue-600 hover:underline">Ammaar Alam</a>. Participation is voluntary; you may withdraw at any time.</div>
       </motion.div>
     </div>
   )
@@ -52,6 +95,26 @@ function Feature({ icon, title, desc }: { icon: JSX.Element, title: string, desc
         <div className="text-slate-600 text-sm">{desc}</div>
       </div>
     </div>
+  )
+}
+
+function CheckIcon() {
+  return (
+    <svg className="mt-0.5 text-emerald-600" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+  )
+}
+
+function DotIcon() {
+  return (
+    <svg className="mt-1 text-slate-400" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="4"/></svg>
+  )
+}
+
+function BadgeCheckIcon() {
+  return (
+    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+    </span>
   )
 }
 
