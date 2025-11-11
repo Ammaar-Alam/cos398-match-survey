@@ -3,6 +3,11 @@ import { motion } from 'framer-motion'
 import Link from 'next/link'
 
 export default function Home() {
+  const fadeUp = {
+    hidden: { opacity: 0, y: 32, scale: 0.98 },
+    visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.4, ease: 'easeOut' } }
+  }
+
   return (
     <div className="container py-16">
       <motion.div initial={{opacity:0, y:8}} animate={{opacity:1, y:0}} transition={{duration:0.4}} className="max-w-5xl mx-auto">
@@ -11,15 +16,21 @@ export default function Home() {
           <p className="text-slate-600 mt-3">Help us understand romantic compatibility through a comprehensive couples questionnaire</p>
         </div>
 
-        <div className="bg-white border rounded-2xl shadow-sm p-6">
+        <motion.div
+          variants={fadeUp}
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, amount: 0.3 }}
+          className="bg-white border rounded-2xl shadow-sm p-6"
+        >
           <h2 className="text-lg font-semibold mb-3">About This Study</h2>
           <p className="text-slate-600 mb-6">This study examines how personality traits, values, and lifestyle preferences relate to relationship compatibility. You and your partner will each independently complete a 50‑question survey that takes approximately 20–25 Minutes.</p>
 
-          <div className="grid sm:grid-cols-3 gap-4 mb-6">
+          <motion.div className="grid sm:grid-cols-3 gap-4 mb-6" initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.4 }}>
             <Feature icon={<ClockIcon/>} title="20–25 Minutes" desc="Complete at your own pace"/>
             <Feature icon={<ShieldIcon/>} title="Confidential" desc="Your data is secure"/>
             <Feature icon={<HeartIcon/>} title="For Couples" desc="Both partners participate"/>
-          </div>
+          </motion.div>
 
           <ul className="list-disc pl-6 text-slate-700 space-y-2 mb-6">
             <li>Answer 50 questions about your personality, values, and preferences</li>
@@ -30,15 +41,21 @@ export default function Home() {
 
           <div className="rounded-md bg-blue-50 text-blue-900 text-sm p-3 mb-6">Important: you and your partner will complete the survey separately. You’ll share a “Couple Code” to link your responses.</div>
 
-          <div className="flex items-center gap-4 justify-center">
+          <motion.div className="flex items-center gap-4 justify-center" initial={{ opacity: 0, y: 14 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.4 }} transition={{ duration: 0.3, ease: 'easeOut', delay: 0.05 }}>
             <Link prefetch className="inline-flex px-6 py-3 rounded-md bg-brand-600 text-white hover:bg-brand-700 shadow" href="/start">Begin Questionnaire</Link>
             <Link className="px-4 py-2 rounded-md border border-slate-300 text-slate-700 hover:bg-slate-50" href="/methods">Methods & Math</Link>
             <Link className="text-brand-700 hover:underline" href="/privacy">Privacy Policy</Link>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
 
-        <div className="mt-12 grid gap-5 lg:grid-cols-2">
-          <section className="rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-6 shadow-sm">
+        <motion.div
+          className="mt-12 grid gap-5 lg:grid-cols-2"
+          variants={fadeUp}
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, amount: 0.35 }}
+        >
+          <motion.section className="rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-6 shadow-sm" initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.4 }} transition={{ duration: 0.35, ease: 'easeOut' }}>
             <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">Research lens</p>
             <h3 className="mt-1 text-2xl font-semibold text-slate-900">What we&apos;re modeling</h3>
             <p className="mt-3 text-sm text-slate-700 leading-relaxed">
@@ -50,9 +67,9 @@ export default function Home() {
               <div className="flex items-start gap-2"><DotIcon/><span>Track ROC/AUC lift, calibration, and stability to test whether a single algorithm can generalize across cohorts.</span></div>
             </div>
             <p className="mt-4 text-xs text-slate-500 italic">Bottom line: we&apos;re asking if an “optimal” couple-matching algorithm exists in practice and what guarantees it can honestly make.</p>
-          </section>
+          </motion.section>
 
-          <section className="rounded-3xl border border-slate-200 bg-gradient-to-br from-white via-white to-blue-50/40 p-6 shadow-sm">
+          <motion.section className="rounded-3xl border border-slate-200 bg-gradient-to-br from-white via-white to-blue-50/40 p-6 shadow-sm" initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.4 }} transition={{ duration: 0.35, ease: 'easeOut', delay: 0.05 }}>
             <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">Participation &amp; outputs</p>
             <h3 className="mt-1 text-2xl font-semibold text-slate-900">What you commit &amp; receive</h3>
             <div className="mt-5 grid gap-4">
@@ -73,12 +90,12 @@ export default function Home() {
                 </div>
               </div>
             </div>
-          </section>
-        </div>
+          </motion.section>
+        </motion.div>
 
-        <div className="mt-6 rounded-2xl border border-indigo-100 bg-indigo-50/80 p-4 text-center text-sm text-indigo-900 shadow-sm">
+        <motion.div className="mt-6 rounded-2xl border border-indigo-100 bg-indigo-50/80 p-4 text-center text-sm text-indigo-900 shadow-sm" variants={fadeUp} initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.3 }}>
           Data collection is still underway; once enough datapoints are collected and the findings are finalized, the paper will be published for COS 398.
-        </div>
+        </motion.div>
 
         <div className="mt-8 text-center text-sm text-slate-500">Questions? Contact <a href="https://ammaaralam.com" className="text-blue-600 hover:underline">Ammaar Alam</a>. Participation is voluntary; you may withdraw at any time.</div>
       </motion.div>
@@ -88,13 +105,20 @@ export default function Home() {
 
 function Feature({ icon, title, desc }: { icon: JSX.Element, title: string, desc: string }) {
   return (
-    <div className="rounded-xl border p-4 flex items-start gap-3">
+    <motion.div
+      className="rounded-xl border p-4 flex items-start gap-3 bg-white/80"
+      initial={{ opacity: 0, y: 12 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      whileHover={{ y: -4, boxShadow: '0 18px 30px rgba(15,23,42,0.12)' }}
+      transition={{ duration: 0.25, ease: 'easeOut' }}
+      viewport={{ once: true, amount: 0.5 }}
+    >
       <div className="text-brand-600">{icon}</div>
       <div>
         <div className="font-medium">{title}</div>
         <div className="text-slate-600 text-sm">{desc}</div>
       </div>
-    </div>
+    </motion.div>
   )
 }
 

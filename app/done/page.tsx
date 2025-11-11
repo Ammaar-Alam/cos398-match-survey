@@ -29,11 +29,30 @@ export default function Done() {
     <div className="container py-14 sm:py-16">
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="mx-auto max-w-3xl space-y-8">
         <header className="text-center space-y-3">
-          <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-brand-100">
-            <svg className="h-8 w-8 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
+          <motion.div
+            className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-brand-100 relative"
+            initial={{ scale: 0.8, rotate: -6, opacity: 0 }}
+            animate={{ scale: 1, rotate: 0, opacity: 1 }}
+            transition={{ type: 'spring', stiffness: 220, damping: 14 }}
+          >
+            <motion.span
+              className="absolute inset-0 rounded-full bg-brand-200 opacity-40 blur-2xl"
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1.4, opacity: 0 }}
+              transition={{ duration: 1.2, repeat: Infinity, repeatType: 'loop', ease: 'easeOut' }}
+            />
+            <motion.svg
+              className="h-8 w-8 text-brand-600"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              initial={{ pathLength: 0 }}
+              animate={{ pathLength: 1 }}
+              transition={{ duration: 0.6, ease: 'easeOut', delay: 0.15 }}
+            >
+              <motion.path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </motion.svg>
+          </motion.div>
           <h1 className="text-3xl font-bold text-slate-900 sm:text-4xl">Thank you for finishing!</h1>
           <p className="text-lg text-slate-600">Your responses are locked in. Once <span className="font-semibold">both partners</span> have finished, let me know and I'll queue your pair for analysis.</p>
         </header>
