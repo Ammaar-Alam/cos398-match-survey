@@ -1,7 +1,7 @@
 
 'use client'
 import { useEffect, useState } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 
 type ProgressSummary = {
   status: 'not_started' | 'in_progress' | 'completed'
@@ -89,28 +89,45 @@ export default function Start() {
           <h1 className="text-3xl font-semibold">Register for TigerMatch Study</h1>
           <p className="text-slate-600 mt-1">Both partners should use the same Couple Code.</p>
         </div>
-        {resumeInfo && (
-          <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-            <div className="text-emerald-900 font-semibold">
+        <AnimatePresence>{resumeInfo && (
+          <motion.div
+            initial={{ opacity: 0, y: 12, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.3, ease: 'easeOut' }}
+            className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50/90 p-4 shadow-sm"
+          >
+            <motion.div className="text-emerald-900 font-semibold flex items-center gap-2" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.05 }}>
+              <motion.span
+                className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-700"
+                initial={{ scale: 0.4, rotate: -20 }}
+                animate={{ scale: 1, rotate: 0 }}
+                transition={{ type: 'spring', stiffness: 260, damping: 16 }}
+              >
+                ✓
+              </motion.span>
               {resumeInfo.status === 'completed' ? 'You already finished this survey.' : 'Resume where you left off'}
-            </div>
+            </motion.div>
             <p className="text-emerald-800 text-sm mt-1">
               {resumeInfo.status === 'completed'
                 ? 'Open the summary page to review next steps or share feedback.'
                 : `Progress: ${Math.round((resumeInfo.answered / Math.max(1, resumeInfo.total)) * 100)}% (${resumeInfo.answered} of ${resumeInfo.total} items).`}
             </p>
-            <div className="mt-3 flex flex-wrap gap-3">
-              <button onClick={() => window.location.href = resumeInfo.resumePath}
-                className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700">
+            <motion.div className="mt-3 flex flex-wrap gap-3" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+              <motion.button
+                whileTap={{ scale: 0.97 }}
+                onClick={() => window.location.href = resumeInfo.resumePath}
+                className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
+              >
                 {resumeInfo.status === 'completed' ? 'View completion page' : 'Jump back in'}
-              </button>
+              </motion.button>
               <button onClick={() => { localStorage.removeItem('participantId'); setResumeInfo(null) }}
                 className="text-sm font-medium text-emerald-900 underline-offset-2 hover:underline">
                 Not you? Clear saved session
               </button>
-            </div>
-          </div>
-        )}
+            </motion.div>
+          </motion.div>
+        )}</AnimatePresence>
         <form onSubmit={onSubmit} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-md grid gap-4">
           <div>
             <label className="block text-sm font-medium">Couple Code *</label>
