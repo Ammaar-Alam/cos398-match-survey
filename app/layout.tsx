@@ -6,7 +6,11 @@ import ClientHeader from './ui/ClientHeader'
 
 export const metadata = {
   title: process.env.NEXT_PUBLIC_SITE_NAME || 'TigerMatch Couples Survey',
-  description: 'Collecting couples questionnaire data for research.'
+  description: 'Collecting couples questionnaire data for research.',
+  icons: {
+    icon: '/icon.svg',
+    shortcut: '/icon.svg'
+  }
 }
 
 export default function RootLayout({ children }: { children: ReactNode }) {
