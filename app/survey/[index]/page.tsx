@@ -43,9 +43,10 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const reviewMode = searchParams?.get('review') === '1'
-  const idx0 = Math.max(0, parseInt(params.index, 10) - 1) || 0
+  const initialIndex = Math.max(0, parseInt(params.index, 10) - 1) || 0
   const [questions, setQuestions] = useState<Question[]>([])
   const [q, setQ] = useState<Question | null>(null)
+  const [activeIndex, setActiveIndex] = useState(initialIndex)
   const [selfAnswer, setSelfAnswer] = useState('')
   const [selfMulti, setSelfMulti] = useState<string[]>([])
   const [importance, setImportance] = useState('')
@@ -53,6 +54,8 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
   const [saving, setSaving] = useState(false)
   const [tStart, setTStart] = useState<number>(0)
   const [participantId, setParticipantId] = useState<string | null>(null)
+
+  const suffix = reviewMode ? '?review=1' : ''
 
   useEffect(() => { fetchQuestions().then(setQuestions) }, [])
 
@@ -82,7 +85,8 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
   }, [participantId, router, reviewMode])
   useEffect(() => {
     if (questions.length > 0) {
-      const qq = questions[idx0]
+      const nextIndex = Math.min(Math.max(activeIndex, 0), Math.max(questions.length - 1, 0))
+      const qq = questions[nextIndex]
       setQ(qq)
       setSelfAnswer('')
       setSelfMulti([])
@@ -90,7 +94,23 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
       setAcceptable(null)
       try { setTStart(performance.now()) } catch {}
     }
-  }, [questions, idx0])
+  }, [questions, activeIndex])
+
+  useEffect(() => {
+    setActiveIndex(initialIndex)
+  }, [initialIndex])
+
+  useEffect(() => {
+    function handlePop() {
+      if (typeof window === 'undefined') return
+      const pathname = window.location.pathname.replace(/\/+$/, '')
+      const lastSegment = pathname.split('/').filter(Boolean).pop() || '1'
+      const parsed = Math.max(0, (parseInt(lastSegment, 10) || 1) - 1)
+      setActiveIndex(parsed)
+    }
+    window.addEventListener('popstate', handlePop)
+    return () => window.removeEventListener('popstate', handlePop)
+  }, [])
 
   useEffect(() => {
     async function loadSaved() {
@@ -131,10 +151,10 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
   if (!q || !participantId) return <div className="container py-12">Loading…</div>
 
   const total = questions.length || 50
-  const progress = Math.round(((idx0 + 1) / total) * 100)
-  const prevProgress = idx0 > 0 ? Math.round((idx0 / total) * 100) : 0
+  const progress = Math.round(((activeIndex + 1) / total) * 100)
+  const prevProgress = activeIndex > 0 ? Math.round((activeIndex / total) * 100) : 0
   // section intro logic
-  const showSectionIntro = idx0 === 0 || questions[idx0]?.section !== questions[idx0 - 1]?.section
+  const showSectionIntro = activeIndex === 0 || questions[activeIndex]?.section !== questions[activeIndex - 1]?.section
   function sectionIntroFor(section?: string, responseType?: string) {
     const normalized = (section || '').toLowerCase()
     if (normalized.includes('pvq')) return COPY.sections.pvq21
@@ -156,6 +176,21 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
     } catch {}
     const meta = sameLikertAsPrev === undefined ? { tMs } : { tMs, sameLikertAsPrev }
     return acc ? { ...acc, meta } : { meta }
+  }
+  function syncUrl(targetIndex: number, method: 'push' | 'replace' = 'push') {
+    if (typeof window === 'undefined') return
+    const next = Math.max(0, targetIndex)
+    const url = `/survey/${next + 1}${suffix}`
+    if (method === 'replace') {
+      window.history.replaceState({ index: next }, '', url)
+    } else {
+      window.history.pushState({ index: next }, '', url)
+    }
+  }
+  function moveToIndex(nextIndex: number, method: 'push' | 'replace' = 'push') {
+    const clamped = Math.max(0, nextIndex)
+    setActiveIndex(clamped)
+    syncUrl(clamped, method)
   }
 
   function currentSelfPayload() {
@@ -179,23 +214,22 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
       router.replace('/start')
       return
     }
-    const isLast = idx0 + 1 >= questions.length
+    const isLast = questions.length > 0 ? activeIndex + 1 >= questions.length : false
     const payload = { participantId, questionId: q.id, selfAnswer: currentSelfPayload(), importance: parseImportance(importance), acceptable: JSON.stringify(withMeta(acceptable)), final: isLast }
     if (isLast) {
       setSaving(true)
       try { await saveResponse(payload); router.push('/done') } finally { setSaving(false) }
     } else {
-      const suffix = reviewMode ? '?review=1' : ''
-      fireAndForgetSave(payload); router.push(`/survey/${idx0 + 2}${suffix}`)
+      fireAndForgetSave(payload)
+      moveToIndex(activeIndex + 1)
     }
   }
   async function goPrev() {
-    if (idx0 === 0) return
+    if (activeIndex === 0) return
     if (hasSelf() && importance && acceptable && q && participantId) {
       fireAndForgetSave({ participantId, questionId: q.id, selfAnswer: currentSelfPayload(), importance: parseImportance(importance), acceptable: JSON.stringify(withMeta(acceptable)), final: false })
     }
-    const suffix = reviewMode ? '?review=1' : ''
-    router.push(`/survey/${idx0}${suffix}`)
+    moveToIndex(activeIndex - 1)
   }
   function parseImportance(label: string) {
     const map: Record<string, number> = { 'Irrelevant': 0, 'A little': 1, 'Somewhat': 10, 'Very': 50, 'Mandatory': 250 }
@@ -245,7 +279,7 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
     <div className="container py-4 sm:py-6">
       <div className="max-w-4xl mx-auto">
         <div className="mb-2 flex items-center justify-between">
-          <div className="text-sm font-medium text-slate-600">Question {idx0 + 1} of {total}</div>
+          <div className="text-sm font-medium text-slate-600">Question {activeIndex + 1} of {total}</div>
           <div className="text-sm text-slate-500">{progress}% complete</div>
         </div>
         <div className="mb-4 h-2 w-full bg-slate-100 rounded-full overflow-hidden">
@@ -467,9 +501,9 @@ export default function SurveyPage({ params }: { params: { index: string } }) {
                 <span>Next</span>
               </div>
               <div className="flex gap-3 w-full sm:w-auto">
-                <button onClick={goPrev} disabled={idx0 === 0} className="px-5 py-2.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-medium">Back</button>
+                <button onClick={goPrev} disabled={activeIndex === 0} className="px-5 py-2.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-medium">Back</button>
                 <button disabled={!hasSelf() || !importance || !acceptable || saving} onClick={goNext} className="px-6 py-2.5 rounded-lg bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium shadow-sm">
-                  {saving ? 'Saving…' : idx0 + 1 >= questions.length ? 'Complete' : 'Next →'}
+                  {saving ? 'Saving…' : activeIndex + 1 >= questions.length ? 'Complete' : 'Next →'}
                 </button>
               </div>
             </div>

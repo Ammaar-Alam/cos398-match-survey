@@ -26,7 +26,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <main className="flex-1">{children}</main>
           <footer className="border-t">
             <div className="container py-6 text-xs text-slate-500">
-              © {new Date().getFullYear()} TigerMatch — Research use only
+              © {new Date().getFullYear()} TigerMatch — Research use only | [CODEX was used to develop this website]
             </div>
           </footer>
         </div>
