@@ -34,12 +34,20 @@ export default function Start() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<string>('')
-  const [months, setMonths] = useState<number>(12)
+  const [months, setMonths] = useState<string>('')
   const [resumeInfo, setResumeInfo] = useState<ProgressSummary | null>(null)
 
   function fullNameFrom(parts: {first?:string; middle?:string; last?:string}) {
     const mi = parts.middle ? (parts.middle.endsWith('.') ? parts.middle : `${parts.middle}.`) : ''
     return [parts.first || '', mi, parts.last || ''].filter(Boolean).join(' ').replace(/\s+/g,' ').trim()
+  }
+
+  function handleMonthsChange(value: string) {
+    if (value === '') {
+      setMonths('')
+      return
+    }
+    if (!Number.isNaN(Number(value))) setMonths(value)
   }
 
   useEffect(() => {
@@ -70,7 +78,8 @@ export default function Start() {
     const email = String(form.get('email') || '') || undefined
     const fullName = fullNameFrom({ first:firstName, middle:middleInitial, last:lastName })
     try {
-      const out = await createOrJoin({ coupleCode, fullName, netId, email, monthsTogether: months || undefined })
+      const monthsTogether = months === '' ? undefined : Math.max(12, Number(months))
+      const out = await createOrJoin({ coupleCode, fullName, netId, email, monthsTogether })
       localStorage.setItem('participantId', out.participantId)
       setToast('Registration successful')
       await goToProgress(out.participantId)
@@ -160,9 +169,11 @@ export default function Start() {
           </div>
           <div>
             <label className="block text-sm font-medium">Months Together</label>
-            <input type="number" name="monthsTogether" min={12} step={1} value={months}
-              onChange={e => setMonths(Math.max(12, Number(e.target.value || 12)))}
-              className={"mt-1 w-full border rounded-md px-3 py-2 " + (months===12?'text-slate-400':'text-slate-900')}
+            <input type="number" name="monthsTogether" min={12} step={1} placeholder="12"
+              value={months}
+              onChange={e => handleMonthsChange(e.target.value)}
+              onBlur={() => { if (months !== '' && Number(months) < 12) setMonths('12') }}
+              className={"mt-1 w-full border rounded-md px-3 py-2 " + (months === ''?'text-slate-400':'text-slate-900')}
             />
             <p className="text-xs text-slate-500 mt-1">Minimum 12 months.</p>
           </div>
