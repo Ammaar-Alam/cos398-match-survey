@@ -1,5 +1,4 @@
-
-import { Pool } from 'pg'
+import { Pool, PoolClient } from 'pg'
 
 // Resolve a connection string from multiple env names for portability (Vercel/Supabase)
 const connectionString =
@@ -19,16 +18,37 @@ const needsSsl =
 
 const ssl = needsSsl ? { rejectUnauthorized: false } : undefined
 
-const globalForPool = global as unknown as { pgPool?: Pool }
+const globalForPool = global as unknown as { pgPool?: Pool; pgPoolTimezoneHooked?: boolean }
 
 if (!connectionString) {
   throw new Error('DATABASE_URL/POSTGRES_URL is not set')
 }
 
-export const pool: Pool = globalForPool.pgPool || new Pool({ connectionString, ssl })
+const dbTimezone = process.env.DB_TIMEZONE || 'America/New_York'
+const timezoneLiteral = dbTimezone?.replace(/'/g, "''") ?? ''
+
+const poolInstance: Pool = globalForPool.pgPool || new Pool({ connectionString, ssl })
+
+function applyTimezone(client: PoolClient) {
+  if (!dbTimezone) return
+  client
+    .query(`SET TIME ZONE '${timezoneLiteral}'`)
+    .catch(err => {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn(`Failed to enforce DB time zone (${dbTimezone})`, err)
+      }
+    })
+}
+
+if (!globalForPool.pgPoolTimezoneHooked && dbTimezone) {
+  poolInstance.on('connect', applyTimezone)
+  globalForPool.pgPoolTimezoneHooked = true
+}
+
+export const pool: Pool = poolInstance
 
 if (process.env.NODE_ENV !== 'production') {
-  globalForPool.pgPool = pool
+  globalForPool.pgPool = poolInstance
 }
 
 export async function query(text: string, params?: any[]): Promise<any> {
