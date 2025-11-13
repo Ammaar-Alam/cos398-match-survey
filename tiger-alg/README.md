@@ -88,3 +88,25 @@ python eval/evaluate_pam.py \
   --bootstrap 500 --permute 200 \
   --out out/summary_pam.csv
 ```
+
+## Merged IDF+LCB pipeline (ROADMAP)
+
+For a small‑n friendly, IDF‑weighted, LCB‑penalized scoring and matching pipeline described in `ROADMAP.md`:
+
+```bash
+cd tiger-alg
+python matching/merged_pipeline.py \
+  --export_csv ../export.csv \
+  --couples_csv ../couples.csv \
+  --meta_json meta.json \
+  --outdir out_merged \
+  --rho 0.35 --delta 0.10 --tau 0.05 --mu 0.03 --topk 2
+```
+
+This writes:
+- `out_merged/pair_scores_merged.csv` — harmonic‑mean, reciprocity‑aware pair scores with LCBs.
+- `out_merged/lists_tied.json` — per‑person preference lists with ties (SMTI‑style).
+- `out_merged/matching_da.json` — bipartite DA outcome (stable under a simple split).
+- `out_merged/matching_best_stable_lp.json` — maximum‑weight stable matching via MILP (falls back to DA if MILP is unavailable).
+- `out_merged/matching_max_weight.json` — exact max‑weight matching (blossom, via NetworkX, with greedy fallback).
+- `out_merged/summary_ranks.json` — per‑person ranks, top‑gaps, robustness tags, and Hit@k / median rank summary.

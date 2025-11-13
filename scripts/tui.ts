@@ -411,6 +411,7 @@ async function main(){
     console.log('11) Train PAM domain weights')
     console.log('12) Run PAM evaluation with trained weights')
     console.log('13) Preview ideal matches (per participant)')
+    console.log('14) Run merged IDF+LCB pipeline (lists + matchings + diagnostics)')
     console.log(' 0) Quit')
     const sel = await prompt('Select')
     if (sel==='0') break
@@ -483,6 +484,26 @@ async function main(){
         console.log('PAM evaluation (learned weights) complete → tiger-alg/out_pam/')
       } else if (sel==='13'){
         await showIdealMatchPreview(py, algDir, exportPath)
+      } else if (sel==='14'){
+        const rho = await prompt('rho (domain soft-cap)', '0.35')
+        const delta = await prompt('delta (LCB confidence)', '0.10')
+        const tau = await prompt('tau (tie threshold factor)', '0.05')
+        const mu = await prompt('mu (mutuality boost, multiplicative)', '0.03')
+        const topk = await prompt('topK for mutuality (r)', '2')
+        console.log('Running merged IDF+LCB pipeline (ROADMAP_2)…')
+        await run(py, [
+          'matching/merged_pipeline.py',
+          '--export_csv','../export.csv',
+          '--couples_csv','../couples.csv',
+          '--meta_json','meta.json',
+          '--outdir','out_merged',
+          '--rho', String(Number(rho) || 0.35),
+          '--delta', String(Number(delta) || 0.10),
+          '--tau', String(Number(tau) || 0.05),
+          '--mu', String(Number(mu) || 0.03),
+          '--topk', String(Number(topk) || 2),
+        ], algDir)
+        console.log('Merged pipeline outputs → tiger-alg/out_merged/')
       } else {
         console.log('Unknown selection')
       }

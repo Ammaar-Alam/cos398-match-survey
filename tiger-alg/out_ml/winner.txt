@@ -1,0 +1,7 @@
+variant: core_c100_n20_geo
+n_couples: 1
+auc: nan
+lift: nan
+median_rank: None
+true_mean: 70.10278700286952
+rnd_mean: nan
