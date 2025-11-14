@@ -165,9 +165,12 @@ def directed_score(
 ) -> Tuple[Dict[str, float], int, float, float]:
     num: Dict[str, float] = {}
     den: Dict[str, float] = {}
+    # accumulators for weighted EB statistics over item-level similarities m in [0,1]
     sum_w = 0.0
     sum_w2 = 0.0
-    var_num = 0.0
+    sum_wm = 0.0
+    sum_w2m = 0.0
+    sum_w2m2 = 0.0
     overlap = 0
     for it in items:
         m = item_similarity(it, a_resp.get(it.id), b_resp.get(it.id))
@@ -179,8 +182,11 @@ def directed_score(
         num[d] = num.get(d, 0.0) + w * m
         den[d] = den.get(d, 0.0) + w
         sum_w += w
-        sum_w2 += w * w
-        var_num += (w * w) * m * (1.0 - m)
+        w2 = w * w
+        sum_w2 += w2
+        sum_wm += w * m
+        sum_w2m += w2 * m
+        sum_w2m2 += w2 * m * m
     contrib: Dict[str, float] = {}
     for d, v in num.items():
         s_d = v / float(den.get(d, 0.0) + EPS)
@@ -200,9 +206,12 @@ def directed_score(
         n_eff = int((sum_w * sum_w) / max(sum_w2, EPS))
         if n_eff <= 0:
             n_eff = max(overlap, 1)
-    # per-item variance proxy (bounded by 0.25)
-    if sum_w2 > 0.0:
-        var_hat = var_num / sum_w2
+    # weighted empirical variance of item-level similarities around their weighted mean
+    if sum_w2 > 0.0 and sum_w > 0.0 and overlap > 0:
+        mu_items = sum_wm / sum_w
+        # Σ w^2 (m - μ)^2 = Σ w^2 m^2 - 2 μ Σ w^2 m + μ^2 Σ w^2
+        var_num = sum_w2m2 - 2.0 * mu_items * sum_w2m + (mu_items * mu_items) * sum_w2
+        var_hat = max(0.0, var_num) / max(sum_w2, EPS)
     else:
         var_hat = 0.0
     # normalize capped_total into [0,1] for the bound
@@ -351,6 +360,7 @@ def build_da_sides(
 def summarize_true_partner_ranks(
     couples_df: pd.DataFrame,
     ids: List[str],
+    lcb: Dict[str, Dict[str, float]],
     scores: Dict[Tuple[str, str], float],
 ) -> Dict[str, Any]:
     per_person: List[Dict[str, Any]] = []
@@ -364,7 +374,8 @@ def summarize_true_partner_ranks(
             continue
         for anchor, target in ((a, b), (b, a)):
             others = [x for x in ids if x != anchor]
-            vals = [(o, scores.get((anchor, o), 0.0)) for o in others]
+            # rank candidates for this anchor by directional LCB (not symmetric pair score)
+            vals = [(o, lcb.get(anchor, {}).get(o, 0.0)) for o in others]
             vals.sort(key=lambda t: t[1], reverse=True)
             rank = next((idx + 1 for idx, (o, _) in enumerate(vals) if o == target), None)
             if rank is None:
@@ -595,7 +606,7 @@ def main() -> None:
     with open(os.path.join(args.outdir, "matching_max_weight.json"), "w", encoding="utf-8") as f:
         json.dump(blossom_match, f, indent=2)
 
-    eval_obj = summarize_true_partner_ranks(couples_df, ids, scores)
+    eval_obj = summarize_true_partner_ranks(couples_df, ids, lcb, scores)
     with open(os.path.join(args.outdir, "summary_ranks.json"), "w", encoding="utf-8") as f:
         json.dump(eval_obj, f, indent=2)
 

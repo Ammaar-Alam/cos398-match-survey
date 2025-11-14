@@ -32,6 +32,8 @@ client/dist/
 tiger-alg/meta.json
 *.json
 */*.json
+*.npz
+*.txt
 
 # Python Specific
 __pycache__
