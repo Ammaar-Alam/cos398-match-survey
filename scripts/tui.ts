@@ -42,9 +42,11 @@ async function ensurePairScores(py: string, algDir: string, cfg: PreviewConfig){
 async function choosePreviewSource(py: string, algDir: string): Promise<PreviewSelection | null>{
   console.log('\nPreview data source:')
   PREVIEW_CONFIGS.forEach(cfg => console.log(` ${cfg.key}) ${cfg.label}`))
-  console.log(' 4) Existing CSV path (skip recompute)')
+  console.log(' 4) Soft-gated domain modes (out_soft/scores_soft.csv)')
+  console.log(' 5) Evolutionary distance-kernel (out_evo/scores_evo.csv)')
+  console.log(' 6) Existing CSV path (skip recompute)')
   const sel = (await prompt('Choose source', '1')).trim()
-  if (sel === '4'){
+  if (sel === '6'){
     const custom = await prompt('Absolute or relative path to CSV', path.join(algDir, 'scores.csv'))
     const resolved = path.isAbsolute(custom) ? custom : path.join(process.cwd(), custom)
     if (!fs.existsSync(resolved)){
@@ -52,6 +54,30 @@ async function choosePreviewSource(py: string, algDir: string): Promise<PreviewS
       return null
     }
     return { label: 'Custom CSV', csvPath: resolved, variant: `Custom (${resolved})` }
+  }
+  if (sel === '4'){
+    const softCsv = path.join(algDir, 'out_soft', 'scores_soft.csv')
+    if (!fs.existsSync(softCsv)){
+      console.log('No soft-gated scores at tiger-alg/out_soft/scores_soft.csv. Run options 15 and 16 first.')
+      return null
+    }
+    return {
+      label: 'Soft-gated domain modes',
+      csvPath: softCsv,
+      variant: 'Soft-gated (domain modes)'
+    }
+  }
+  if (sel === '5'){
+    const evoCsv = path.join(algDir, 'out_evo', 'scores_evo.csv')
+    if (!fs.existsSync(evoCsv)){
+      console.log('No evolutionary scores at tiger-alg/out_evo/scores_evo.csv. Run options 17 and 18 first.')
+      return null
+    }
+    return {
+      label: 'Evolutionary distance-kernel model',
+      csvPath: evoCsv,
+      variant: 'Evolutionary (distance-kernel)'
+    }
   }
   const cfg = PREVIEW_CONFIGS.find(c => c.key === sel)
   if (!cfg){
@@ -214,7 +240,14 @@ function readRankings(csvPath: string){
     const b = unquote(cols[idxB] || '')
     const score = Number(unquote(cols[idxScore] || ''))
     if (!a || !b || !Number.isFinite(score)) continue
-    const pct = idxPct >=0 ? Number(unquote(cols[idxPct] || '')) : NaN
+    let pct = NaN
+    if (idxPct >= 0){
+      const raw = unquote(cols[idxPct] || '')
+      if (raw.trim() !== ''){
+        const v = Number(raw)
+        if (Number.isFinite(v)) pct = v
+      }
+    }
     const arr = out.get(a) || []
     arr.push({ targetId: b, score, pct })
     out.set(a, arr)
@@ -239,6 +272,10 @@ async function showIdealMatchPreview(py: string, algDir: string, exportPath: str
   }
   const selection = await choosePreviewSource(py, algDir)
   if (!selection) return
+  await renderIdealMatchPreview(exportPath, selection)
+}
+
+async function renderIdealMatchPreview(exportPath: string, selection: PreviewSelection){
   const participants = loadParticipantMeta(exportPath)
   const rankings = readRankings(selection.csvPath)
   if (rankings.size === 0){ console.log(`${selection.csvPath} does not contain any pair entries.`); return }
@@ -395,9 +432,11 @@ async function main(){
 
   // Menu loop
   let variant = 'core_c100_n20_geo'
-  let nps = Number(await prompt('nonpartner_samples (0 recommended for small data)', '0')) || 0
+  let npsInput = Number(await prompt('nonpartner_samples (0 → auto, recommended ≥5)', '5')) || 0
+  let nps = npsInput <= 0 ? 5 : npsInput
   for(;;){
     console.log('\nChoose an action:')
+    console.log(' [Baseline / ML]')
     console.log(' 1) Run baseline evaluation')
     console.log(' 2) Show baseline scores')
     console.log(' 3) Train ML domain weights')
@@ -405,12 +444,21 @@ async function main(){
     console.log(' 5) Show ML scores')
     console.log(' 6) Change variant (current: '+variant+')')
     console.log(' 7) Change nonpartner_samples (current: '+nps+')')
+    console.log(' [PAM (probabilistic acceptability)]')
     console.log(' 8) Run PAM (probabilistic) evaluation')
     console.log(' 9) Show PAM pair scores')
     console.log('10) Build PAM lists + demo matching')
     console.log('11) Train PAM domain weights')
     console.log('12) Run PAM evaluation with trained weights')
+    console.log(' [Previews & merged pipeline]')
     console.log('13) Preview ideal matches (per participant)')
+    console.log('14) Run merged IDF+LCB pipeline (lists + matchings + diagnostics)')
+    console.log(' [Soft-gated and evolutionary distance-kernel models]')
+    console.log('15) Train soft-gated domain modes')
+    console.log('16) Evaluate soft-gated model')
+    console.log('17) Train evolutionary distance-kernel model')
+    console.log('18) Evaluate evolutionary model')
+    console.log('19) Show domain-mode reports (soft/evo)')
     console.log(' 0) Quit')
     const sel = await prompt('Select')
     if (sel==='0') break
@@ -434,7 +482,8 @@ async function main(){
         const v = await prompt('Variant name', variant)
         if (v) variant = v
       } else if (sel==='7'){
-        nps = Number(await prompt('nonpartner_samples', String(nps))) || nps
+        const v = Number(await prompt('nonpartner_samples (0 → auto, recommended ≥5)', String(nps))) || 0
+        nps = v <= 0 ? 5 : v
       } else if (sel==='8'){
         const delta = await prompt('delta (LCB quantile)', '0.10')
         console.log('Running PAM evaluation…')
@@ -483,6 +532,68 @@ async function main(){
         console.log('PAM evaluation (learned weights) complete → tiger-alg/out_pam/')
       } else if (sel==='13'){
         await showIdealMatchPreview(py, algDir, exportPath)
+      } else if (sel==='14'){
+        const rho = await prompt('rho (domain soft-cap)', '0.35')
+        const delta = await prompt('delta (LCB confidence)', '0.10')
+        const tau = await prompt('tau (tie threshold factor)', '0.05')
+        const mu = await prompt('mu (mutuality boost, multiplicative)', '0.03')
+        const topk = await prompt('topK for mutuality (r)', '2')
+        console.log('Running merged IDF+LCB pipeline (ROADMAP_2)…')
+        await run(py, [
+          'matching/merged_pipeline.py',
+          '--export_csv','../export.csv',
+          '--couples_csv','../couples.csv',
+          '--meta_json','meta.json',
+          '--outdir','out_merged',
+          '--rho', String(Number(rho) || 0.35),
+          '--delta', String(Number(delta) || 0.10),
+          '--tau', String(Number(tau) || 0.05),
+          '--mu', String(Number(mu) || 0.03),
+          '--topk', String(Number(topk) || 2),
+        ], algDir)
+        console.log('Merged pipeline outputs → tiger-alg/out_merged/')
+      } else if (sel==='15'){
+        const deltaFeat = await prompt('delta (LCB for distance features)', '0.10')
+        console.log('Building PAM distance features…')
+        await run(py, ['preprocess/normalize.py','--export_csv','../export.csv','--meta_json','meta.json','--out','norm.json'], algDir)
+        await run(py, ['features/build_pair_tensors.py','lcbs','--export_csv','../export.csv','--meta_json','meta.json','--questions_json','../data/questions.json','--delta', String(Number(deltaFeat)||0.10),'--out','lcbs.npz'], algDir)
+        await run(py, ['features/build_pair_tensors.py','dists','--export_csv','../export.csv','--meta_json','meta.json','--norm_json','norm.json','--out','dists.npz'], algDir)
+        await run(py, ['features/make_features.py','--lcbs','lcbs.npz','--dists','dists.npz','--out','features.npz'], algDir)
+        console.log('Training soft-gated domain modes…')
+        await run(py, ['ml/soft_gated_trainer.py','--features','features.npz','--couples_csv','../couples.csv','--outdir','out_soft'], algDir)
+        console.log('Soft-gated config → tiger-alg/out_soft/best_config.json')
+      } else if (sel==='16'){
+        const featPath = path.join(algDir, 'features.npz')
+        const cfgPath = path.join(algDir, 'out_soft', 'best_config.json')
+        if (!fs.existsSync(featPath)){ console.log('No features tensor at tiger-alg/features.npz. Run option 15 first.'); continue }
+        if (!fs.existsSync(cfgPath)){ console.log('No soft-gated config at tiger-alg/out_soft/best_config.json. Run option 15 first.'); continue }
+        console.log('Evaluating soft-gated model…')
+        await run(py, ['eval/harness.py','--features','features.npz','--couples_csv','../couples.csv','--config','out_soft/best_config.json','--outdir','out_soft','--topk','3','--scores_basename','scores_soft.csv'], algDir)
+        console.log('Soft-gated metrics → tiger-alg/out_soft/metrics.csv')
+        console.log('Soft-gated pair scores → tiger-alg/out_soft/scores_soft.csv')
+      } else if (sel==='17'){
+        const featPath = path.join(algDir, 'features.npz')
+        if (!fs.existsSync(featPath)){ console.log('No features tensor at tiger-alg/features.npz. Run option 15 first.'); continue }
+        const args = ['ml/evolutionary_trainer.py','--features','features.npz','--couples_csv','../couples.csv','--outdir','out_evo']
+        const softCfg = path.join(algDir, 'out_soft', 'best_config.json')
+        if (fs.existsSync(softCfg)) args.push('--seed_config','out_soft/best_config.json')
+        console.log('Running evolutionary search over domain modes…')
+        await run(py, args, algDir)
+        console.log('Evolutionary config → tiger-alg/out_evo/best_config.json (history → history.csv)')
+      } else if (sel==='18'){
+        const featPath = path.join(algDir, 'features.npz')
+        const evoCfg = path.join(algDir, 'out_evo', 'best_config.json')
+        if (!fs.existsSync(featPath)){ console.log('No features tensor at tiger-alg/features.npz. Run option 15 first.'); continue }
+        if (!fs.existsSync(evoCfg)){ console.log('No evolutionary config at tiger-alg/out_evo/best_config.json. Run option 17 first.'); continue }
+        console.log('Evaluating evolutionary model…')
+        await run(py, ['eval/harness.py','--features','features.npz','--couples_csv','../couples.csv','--config','out_evo/best_config.json','--outdir','out_evo','--topk','3','--scores_basename','scores_evo.csv'], algDir)
+        console.log('Evolutionary metrics → tiger-alg/out_evo/metrics.csv')
+        console.log('Evolutionary pair scores → tiger-alg/out_evo/scores_evo.csv')
+      } else if (sel==='19'){
+        console.log('Soft-gated domain summary → tiger-alg/out_soft/domain_summary.csv')
+        console.log('Soft-gated ablations    → tiger-alg/out_soft/domain_ablation.csv')
+        console.log('Evolutionary domain summary (if run) → tiger-alg/out_evo/domain_summary.csv')
+        console.log('Evolutionary ablations (if run)     → tiger-alg/out_evo/domain_ablation.csv')
       } else {
         console.log('Unknown selection')
       }

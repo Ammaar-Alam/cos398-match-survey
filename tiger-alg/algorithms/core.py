@@ -3,12 +3,12 @@ from math import sqrt
 from typing import Dict, Any, Iterable, Tuple
 
 DEFAULT_DOMAIN_MULTIPLIER = {
-    "Values": 3.0,
-    "Communication": 2.0,
-    "Lifestyle": 2.0,
-    "Social": 1.5,
-    "Personality": 1.0,
-    "Friendship": 1.0,
+    "Values": 5.0,
+    "Communication": 3.0,
+    "Lifestyle": 3.0,
+    "Social": 0.5,
+    "Personality": 0.5,
+    "Friendship": 0.5,
     # Anything else (e.g., IMC/Quality) will be treated as 0.0
 }
 

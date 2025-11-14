@@ -40,13 +40,34 @@ export default function Home() {
           </ul>
 
           <div className="rounded-md bg-blue-50 text-blue-900 text-sm p-3 mb-6">Important: you and your partner will complete the survey separately. You’ll share a “Couple Code” to link your responses.</div>
-
+        
           <motion.div className="flex items-center gap-4 justify-center" initial={{ opacity: 0, y: 14 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.4 }} transition={{ duration: 0.3, ease: 'easeOut', delay: 0.05 }}>
             <Link prefetch className="inline-flex px-6 py-3 rounded-md bg-brand-600 text-white hover:bg-brand-700 shadow" href="/start">Begin Questionnaire</Link>
             <Link className="px-4 py-2 rounded-md border border-slate-300 text-slate-700 hover:bg-slate-50" href="/methods">Methods & Math</Link>
             <Link className="text-brand-700 hover:underline" href="/privacy">Privacy Policy</Link>
           </motion.div>
         </motion.div>
+
+        <p className="mt-6 text-center text-xs text-slate-400">
+          Conducted by{' '}
+          <a
+            href="https://ammaaralam.com"
+            className="text-slate-500 hover:text-blue-600 hover:underline"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Ammaar Alam
+          </a>{' '}
+          (COS 398) under the supervision of{' '}
+          <a
+            href="https://www.cs.princeton.edu/people/profile/dallagnol"
+            className="text-slate-500 hover:text-blue-600 hover:underline"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Prof. Marcel Dall&apos;Agnol
+          </a>.
+        </p>
 
         <motion.div
           className="mt-12 grid gap-5 lg:grid-cols-2"

@@ -29,12 +29,11 @@ processed_snippets.json
 client/dist/
 *.csv
 */*.csv
-tiger-alg/out/
 tiger-alg/meta.json
-tiger-alg/out_ml/
-tiger-alg/out_pam/
 *.json
 */*.json
+*.npz
+*.txt
 
 # Python Specific
 __pycache__
