@@ -17,8 +17,10 @@ export default function MathBlock({ tex, inline=false }: { tex: string, inline?:
     return <span className="align-middle" dangerouslySetInnerHTML={{ __html: html }} />
   }
   return (
-    <div className="-mx-3 my-3 overflow-x-auto px-3">
-      <div className="min-w-max text-sm leading-relaxed sm:text-base" dangerouslySetInnerHTML={{ __html: html }} />
+    <div className="my-2 w-full overflow-x-auto overflow-y-hidden px-1">
+      <div className="mx-auto max-w-full text-center">
+        <div className="inline-block px-1 text-xs leading-relaxed sm:text-sm md:text-base" dangerouslySetInnerHTML={{ __html: html }} />
+      </div>
     </div>
   )
 }
