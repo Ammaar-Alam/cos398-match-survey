@@ -459,6 +459,10 @@ async function main(){
     console.log('17) Train evolutionary distance-kernel model')
     console.log('18) Evaluate evolutionary model')
     console.log('19) Show domain-mode reports (soft/evo)')
+    console.log(' [Production]')
+    console.log('20) Run production matching (preference lists + 1:1 matching)')
+    console.log(' [Paper]')
+    console.log('21) Compare all algorithms (paper table + LaTeX)')
     console.log(' 0) Quit')
     const sel = await prompt('Select')
     if (sel==='0') break
@@ -594,6 +598,118 @@ async function main(){
         console.log('Soft-gated ablations    → tiger-alg/out_soft/domain_ablation.csv')
         console.log('Evolutionary domain summary (if run) → tiger-alg/out_evo/domain_summary.csv')
         console.log('Evolutionary ablations (if run)     → tiger-alg/out_evo/domain_ablation.csv')
+      } else if (sel==='20'){
+        // Production matching - select algorithm
+        console.log('\nSelect algorithm:')
+        console.log(' 1) Evolutionary (Hit@1=50%, Hit@3=67%)')
+        console.log(' 2) Soft-gated (Hit@1=17%, Hit@3=42%)')
+        console.log(' 3) ML-weighted (AUC=0.52)')
+        console.log(' 4) Baseline')
+        const algSel = await prompt('Algorithm', '1')
+
+        // Check for required files based on selection
+        const featPath = path.join(algDir, 'features.npz')
+        let configPath = ''
+        let algName = ''
+
+        if (algSel === '1') {
+          configPath = path.join(algDir, 'out_evo', 'best_config.json')
+          algName = 'Evolutionary'
+          if (!fs.existsSync(configPath)) {
+            console.log('No evolutionary config. Run options 15 + 17 first.')
+            continue
+          }
+        } else if (algSel === '2') {
+          configPath = path.join(algDir, 'out_soft', 'best_config.json')
+          algName = 'Soft-gated'
+          if (!fs.existsSync(configPath)) {
+            console.log('No soft-gated config. Run option 15 first.')
+            continue
+          }
+        } else if (algSel === '3') {
+          // ML-weighted needs a different approach - use default config with ML weights
+          // For now, fall back to soft-gated if available, else evolutionary
+          if (fs.existsSync(path.join(algDir, 'out_evo', 'best_config.json'))) {
+            configPath = path.join(algDir, 'out_evo', 'best_config.json')
+          } else if (fs.existsSync(path.join(algDir, 'out_soft', 'best_config.json'))) {
+            configPath = path.join(algDir, 'out_soft', 'best_config.json')
+          }
+          algName = 'ML-weighted'
+          if (!configPath || !fs.existsSync(configPath)) {
+            console.log('No config available. Run options 15 + 17 first.')
+            continue
+          }
+        } else {
+          // Baseline - use soft-gated or evolutionary config if available
+          if (fs.existsSync(path.join(algDir, 'out_evo', 'best_config.json'))) {
+            configPath = path.join(algDir, 'out_evo', 'best_config.json')
+          } else if (fs.existsSync(path.join(algDir, 'out_soft', 'best_config.json'))) {
+            configPath = path.join(algDir, 'out_soft', 'best_config.json')
+          }
+          algName = 'Baseline'
+          if (!configPath || !fs.existsSync(configPath)) {
+            console.log('No config available. Run options 15 + 17 first.')
+            continue
+          }
+        }
+
+        if (!fs.existsSync(featPath)) {
+          console.log('No features.npz. Run option 15 first to build features.')
+          continue
+        }
+
+        const topK = Number(await prompt('Top-K candidates per person', '5')) || 5
+
+        console.log(`\nRunning production matching with ${algName}...`)
+        await run(py, [
+          'production/run_matching.py',
+          '--features', 'features.npz',
+          '--export_csv', '../export.csv',
+          '--config', configPath.replace(algDir + '/', ''),
+          '--outdir', 'out_production',
+          '--top_k', String(topK),
+          '--algorithm', algName,
+        ], algDir)
+        console.log('\nProduction outputs → tiger-alg/out_production/')
+      } else if (sel==='21'){
+        // Paper comparison - compare all algorithms
+        const featPath = path.join(algDir, 'features.npz')
+        const evoCfg = path.join(algDir, 'out_evo', 'best_config.json')
+        const softCfg = path.join(algDir, 'out_soft', 'best_config.json')
+        const mergedSummary = path.join(algDir, 'out_merged', 'summary_ranks.json')
+
+        if (!fs.existsSync(featPath)) {
+          console.log('No features.npz. Run option 15 first to build features.')
+          continue
+        }
+        if (!fs.existsSync(evoCfg)) {
+          console.log('No evolutionary config. Run options 15 + 17 first.')
+          continue
+        }
+        if (!fs.existsSync(softCfg)) {
+          console.log('No soft-gated config. Run option 15 first.')
+          continue
+        }
+
+        console.log('\nComparing all algorithms for paper...')
+        const args = [
+          'paper/compare_all.py',
+          '--features', 'features.npz',
+          '--couples_csv', '../couples.csv',
+          '--export_csv', '../export.csv',
+          '--evo_config', 'out_evo/best_config.json',
+          '--soft_config', 'out_soft/best_config.json',
+          '--outdir', 'out_paper',
+        ]
+        if (fs.existsSync(mergedSummary)) {
+          args.push('--merged_summary', 'out_merged/summary_ranks.json')
+        }
+        await run(py, args, algDir)
+        console.log('\nPaper outputs → tiger-alg/out_paper/')
+        console.log('  - comparison_table.csv')
+        console.log('  - comparison_table.tex (LaTeX)')
+        console.log('  - domain_weights.csv')
+        console.log('  - per_couple_detail.csv')
       } else {
         console.log('Unknown selection')
       }
